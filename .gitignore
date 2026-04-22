@@ -1,0 +1,42 @@
+# ==================
+# Variables de entorno
+# ==================
+.env
+.env.local
+.env.*.local
+
+# ==================
+# Frontend (Node/Vite)
+# ==================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# ==================
+# Backend (Python/Flask)
+# ==================
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/venv/
+backend/.venv/
+backend/instance/
+backend/*.sqlite
+backend/*.db
+backend/flask_session/
+
+# ==================
+# Sistema operativo
+# ==================
+.DS_Store
+Thumbs.db
+
+# ==================
+# IDEs
+# ==================
+.vscode/
+.idea/
+*.swp
+
+.claude
