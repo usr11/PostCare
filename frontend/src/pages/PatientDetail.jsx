@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 
@@ -6,6 +6,10 @@ export default function PatientDetail() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState([]);
+  const [msgText, setMsgText] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     api
@@ -13,7 +17,41 @@ export default function PatientDetail() {
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    api.getMessages(id).then(setMessages).catch(console.error);
   }, [id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const lastId = messages.length > 0 ? messages[messages.length - 1].id : 0;
+      api
+        .getMessages(id, lastId)
+        .then((newMsgs) => {
+          if (newMsgs.length > 0) setMessages((prev) => [...prev, ...newMsgs]);
+        })
+        .catch(console.error);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [id, messages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleSend(e) {
+    e.preventDefault();
+    if (!msgText.trim() || sending) return;
+    setSending(true);
+    try {
+      const msg = await api.sendMessage(id, "doctor", msgText.trim());
+      setMessages((prev) => [...prev, msg]);
+      setMsgText("");
+    } catch (err) {
+      console.error("Error sending message:", err);
+    } finally {
+      setSending(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -100,6 +138,61 @@ export default function PatientDetail() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Mensajes al Paciente
+        </h2>
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="h-72 overflow-y-auto bg-gray-50 p-4 space-y-3">
+            {messages.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-8">
+                No hay mensajes aún. Escribe una instrucción para el paciente.
+              </p>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.sender === "doctor" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                    msg.sender === "doctor"
+                      ? "bg-primary text-white"
+                      : "bg-white border border-gray-200 text-gray-800"
+                  }`}
+                >
+                  <p className={`text-xs font-semibold mb-0.5 ${msg.sender === "doctor" ? "text-sky-100" : "text-primary"}`}>
+                    {msg.sender === "doctor" ? "Médico" : "Paciente"}
+                  </p>
+                  <p className="text-sm">{msg.text}</p>
+                  <p className={`text-[10px] mt-1 ${msg.sender === "doctor" ? "text-sky-200" : "text-gray-400"}`}>
+                    {new Date(msg.created_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+          <form onSubmit={handleSend} className="flex border-t border-gray-200">
+            <input
+              type="text"
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+              placeholder="Escribe una instrucción para el paciente..."
+              className="flex-1 px-4 py-3 text-sm focus:outline-none"
+              disabled={sending}
+            />
+            <button
+              type="submit"
+              disabled={sending || !msgText.trim()}
+              className="px-6 py-3 bg-primary text-white text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
+            >
+              Enviar
+            </button>
+          </form>
         </div>
       </div>
 

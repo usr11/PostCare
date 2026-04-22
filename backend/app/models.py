@@ -100,6 +100,29 @@ class SymptomAnswer(db.Model):
         }
 
 
+class Message(db.Model):
+    __tablename__ = "messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
+    sender = db.Column(db.String(20), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    patient = db.relationship("Patient", backref=db.backref("messages", lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "sender": self.sender,
+            "text": self.text,
+            "read": self.read,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 class Alert(db.Model):
     __tablename__ = "alerts"
 

@@ -15,6 +15,7 @@ def create_app():
     db.init_app(app)
 
     from app.routes.dashboard import dashboard_bp
+    from app.routes.messages import messages_bp
     from app.routes.onboarding import onboarding_bp
     from app.routes.sos import sos_bp
     from app.routes.symptoms import symptoms_bp
@@ -23,6 +24,7 @@ def create_app():
     app.register_blueprint(symptoms_bp, url_prefix="/api/symptoms")
     app.register_blueprint(sos_bp, url_prefix="/api/sos")
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
+    app.register_blueprint(messages_bp, url_prefix="/api/messages")
 
     with app.app_context():
         db.create_all()

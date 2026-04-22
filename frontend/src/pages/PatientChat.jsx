@@ -30,11 +30,34 @@ export default function PatientChat() {
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [recordId, setRecordId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [lastMsgId, setLastMsgId] = useState(0);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, buttons]);
+
+  useEffect(() => {
+    if (!patient) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const newMsgs = await api.getMessages(patient.id, lastMsgId);
+        const doctorMsgs = newMsgs.filter((m) => m.sender === "doctor");
+        if (doctorMsgs.length > 0) {
+          for (const msg of doctorMsgs) {
+            addMessage("doctor", msg.text);
+          }
+          setLastMsgId(newMsgs[newMsgs.length - 1].id);
+          api.markMessagesRead(patient.id);
+        }
+      } catch {
+        /* polling error, skip */
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [patient, lastMsgId]);
 
   function addMessage(sender, text, list) {
     setMessages((prev) => [
@@ -85,6 +108,16 @@ export default function PatientChat() {
       setButtons(
         currentQuestion.options.map((o) => ({ label: o.label, value: o.value }))
       );
+      return;
+    }
+
+    if (patient && (phase === PHASES.ONBOARDED || phase === PHASES.COMPLETED)) {
+      addMessage("user", userInput);
+      try {
+        await api.sendMessage(patient.id, "patient", userInput);
+      } catch {
+        addMessage("bot", "No se pudo enviar tu mensaje. Intenta de nuevo.");
+      }
       return;
     }
   }
@@ -170,6 +203,8 @@ export default function PatientChat() {
 
   const showInput =
     phase === PHASES.DOCUMENT_INPUT ||
+    phase === PHASES.ONBOARDED ||
+    phase === PHASES.COMPLETED ||
     (phase === PHASES.QUESTIONNAIRE && !buttons);
 
   return (

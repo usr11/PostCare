@@ -45,4 +45,16 @@ export const api = {
   getAlerts: (status = "active") => request(`/dashboard/alerts?status=${status}`),
   resolveAlert: (id) => request(`/dashboard/alerts/${id}/resolve`, { method: "POST" }),
   getStats: () => request("/dashboard/stats"),
+
+  sendMessage: (patient_id, sender, text) =>
+    request("/messages/send", {
+      method: "POST",
+      body: JSON.stringify({ patient_id, sender, text }),
+    }),
+
+  getMessages: (patient_id, afterId = 0) =>
+    request(`/messages/${patient_id}?after=${afterId}`),
+
+  markMessagesRead: (patient_id) =>
+    request(`/messages/${patient_id}/read`, { method: "POST" }),
 };
