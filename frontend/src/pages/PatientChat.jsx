@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import ChatButtons from "../components/ChatButtons";
 import ChatMessage from "../components/ChatMessage";
@@ -14,6 +14,8 @@ const PHASES = {
 };
 
 export default function PatientChat() {
+  const navigate = useNavigate();
+  const [showSOSConfirm, setShowSOSConfirm] = useState(false);
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -149,15 +151,21 @@ export default function PatientChat() {
 
   async function handleSOS() {
     if (!patient) return;
+    setShowSOSConfirm(false);
     setLoading(true);
     try {
       const data = await api.triggerSOS(patient.id);
-      addMessage("bot", `🚨 ${data.message}`);
+      addMessage("bot", data.message);
     } catch {
       addMessage("bot", "Error al enviar la alerta. Llama al 123 de inmediato.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem("role");
+    navigate("/login");
   }
 
   const showInput =
@@ -177,23 +185,15 @@ export default function PatientChat() {
               <p className="text-xs text-green-500">En línea</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {patient && (
-              <button
-                onClick={handleSOS}
-                disabled={loading}
-                className="px-4 py-2 bg-danger text-white rounded-full text-sm font-bold hover:bg-danger-dark transition-colors animate-pulse disabled:opacity-50"
-              >
-                S.O.S.
-              </button>
-            )}
-            <Link
-              to="/dashboard"
-              className="text-sm text-gray-500 hover:text-primary transition-colors"
-            >
-              Panel Clínico
-            </Link>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-danger rounded-lg hover:bg-red-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Salir
+          </button>
         </div>
       </header>
 
@@ -256,6 +256,54 @@ export default function PatientChat() {
               Enviar
             </button>
           </form>
+        </div>
+      )}
+
+      {patient && (
+        <button
+          onClick={() => setShowSOSConfirm(true)}
+          disabled={loading}
+          className="fixed bottom-6 right-6 w-16 h-16 bg-danger text-white rounded-full shadow-lg shadow-red-300 hover:bg-danger-dark transition-all hover:scale-110 disabled:opacity-50 flex items-center justify-center z-50"
+        >
+          <div className="text-center leading-tight">
+            <svg className="w-6 h-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-[10px] font-bold">S.O.S.</span>
+          </div>
+        </button>
+      )}
+
+      {showSOSConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              Alerta de Emergencia
+            </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Se enviará una alerta urgente al equipo médico. Si tu situación es
+              grave, llama al <strong>123</strong> o dirígete a urgencias.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSOSConfirm(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSOS}
+                className="flex-1 px-4 py-2.5 bg-danger text-white rounded-xl text-sm font-bold hover:bg-danger-dark transition-colors"
+              >
+                Enviar S.O.S.
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

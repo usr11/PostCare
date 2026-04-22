@@ -1,12 +1,13 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
-
-const navItems = [
-  { path: "/dashboard", label: "Panel General" },
-  { path: "/chat", label: "Vista Paciente" },
-];
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    sessionStorage.removeItem("role");
+    navigate("/login");
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -18,23 +19,29 @@ export default function Layout() {
                 PostCare
               </Link>
               <div className="flex gap-1">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      location.pathname.startsWith(item.path)
-                        ? "bg-sky-50 text-primary"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+                <Link
+                  to="/dashboard"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === "/dashboard"
+                      ? "bg-sky-50 text-primary"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  Panel General
+                </Link>
               </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
               <span className="text-sm text-gray-500">Panel Clínico</span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-danger rounded-lg hover:bg-red-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Cerrar sesión
+              </button>
             </div>
           </div>
         </div>
