@@ -57,4 +57,27 @@ export const api = {
 
   markMessagesRead: (patient_id) =>
     request(`/messages/${patient_id}/read`, { method: "POST" }),
+
+  getMedications: (patient_id) => request(`/medications/${patient_id}`),
+
+  addMedication: (patient_id, name, dose, schedule_times) =>
+    request("/medications/", {
+      method: "POST",
+      body: JSON.stringify({ patient_id, name, dose, schedule_times }),
+    }),
+
+  deleteMedication: (med_id) =>
+    request(`/medications/${med_id}`, { method: "DELETE" }),
+
+  getPendingReminders: (patient_id) =>
+    request(`/medications/reminders/${patient_id}`),
+
+  confirmTake: (reminder_id) =>
+    request(`/medications/reminders/${reminder_id}/take`, { method: "POST" }),
+
+  postponeReminder: (reminder_id) =>
+    request(`/medications/reminders/${reminder_id}/postpone`, { method: "POST" }),
+
+  getReminderHistory: (patient_id) =>
+    request(`/medications/reminders/history/${patient_id}`),
 };

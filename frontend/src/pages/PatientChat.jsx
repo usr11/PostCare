@@ -31,7 +31,9 @@ export default function PatientChat() {
   const [recordId, setRecordId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastMsgId, setLastMsgId] = useState(0);
+  const [questionnaireStartedAt, setQuestionnaireStartedAt] = useState(null);
   const messagesEndRef = useRef(null);
+  const seenReminderIds = useRef(new Set());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -58,6 +60,56 @@ export default function PatientChat() {
 
     return () => clearInterval(interval);
   }, [patient, lastMsgId]);
+
+  useEffect(() => {
+    if (!patient) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const reminders = await api.getPendingReminders(patient.id);
+        const newOnes = reminders.filter((r) => !seenReminderIds.current.has(r.id));
+        if (newOnes.length > 0) {
+          for (const r of newOnes) {
+            addMessage(
+              "medication",
+              `Es hora de tu medicamento:\n${r.medication_name} - ${r.medication_dose}`,
+            );
+            seenReminderIds.current.add(r.id);
+          }
+          const last = newOnes[newOnes.length - 1];
+          const btns = [
+            { label: "Ya la tomé", value: `med_take_${last.id}` },
+          ];
+          if (!last.postponed) {
+            btns.push({ label: "Posponer 1 hora", value: `med_postpone_${last.id}` });
+          }
+          if (phase !== PHASES.QUESTIONNAIRE) {
+            setButtons(btns);
+          }
+        }
+      } catch {
+        /* skip */
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [patient, phase]);
+
+  useEffect(() => {
+    if (!questionnaireStartedAt || phase !== PHASES.QUESTIONNAIRE) return;
+
+    const timeout = setTimeout(() => {
+      addMessage(
+        "bot",
+        "El cuestionario ha expirado por inactividad (más de 1 hora). Se ha marcado como incompleto."
+      );
+      setButtons(null);
+      setCurrentQuestion(null);
+      setPhase(PHASES.COMPLETED);
+    }, 3600000);
+
+    return () => clearTimeout(timeout);
+  }, [questionnaireStartedAt, phase]);
 
   function addMessage(sender, text, list) {
     setMessages((prev) => [
@@ -143,14 +195,23 @@ export default function PatientChat() {
       }
 
       if (phase === PHASES.ONBOARDED && option.value === "start") {
-        const data = await api.startQuestionnaire(patient.id);
-        setRecordId(data.record_id);
-        if (data.message) addMessage("bot", data.message);
-        if (data.question) {
-          setCurrentQuestion(data.question);
-          addMessage("bot", data.question.question_text);
-          setButtons(data.question.options);
-          setPhase(PHASES.QUESTIONNAIRE);
+        try {
+          const data = await api.startQuestionnaire(patient.id);
+          setRecordId(data.record_id);
+          setQuestionnaireStartedAt(Date.now());
+          if (data.message) addMessage("bot", data.message);
+          if (data.question) {
+            setCurrentQuestion(data.question);
+            addMessage("bot", data.question.question_text);
+            setButtons(data.question.options);
+            setPhase(PHASES.QUESTIONNAIRE);
+          }
+        } catch {
+          addMessage(
+            "bot",
+            "Ya completaste tu cuestionario de hoy. ¡Descansa y nos vemos mañana!"
+          );
+          setPhase(PHASES.COMPLETED);
         }
         return;
       }
@@ -170,6 +231,19 @@ export default function PatientChat() {
           addMessage("bot", data.question.question_text);
           setButtons(data.question.options);
         }
+        return;
+      }
+      if (option.value?.startsWith("med_take_")) {
+        const reminderId = parseInt(option.value.replace("med_take_", ""));
+        const data = await api.confirmTake(reminderId);
+        addMessage("bot", data.message);
+        return;
+      }
+
+      if (option.value?.startsWith("med_postpone_")) {
+        const reminderId = parseInt(option.value.replace("med_postpone_", ""));
+        const data = await api.postponeReminder(reminderId);
+        addMessage("bot", data.message);
         return;
       }
     } catch (err) {

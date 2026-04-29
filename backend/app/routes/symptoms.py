@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
@@ -20,7 +20,7 @@ def start_questionnaire(patient_id):
         return jsonify({"error": "Ya completaste el cuestionario de hoy."}), 400
 
     if existing and existing.status == "in_progress":
-        now = datetime.now(timezone.utc)
+        now = datetime.now()
         if existing.started_at and (now - existing.started_at) > timedelta(hours=1):
             existing.status = "incomplete"
             db.session.commit()
@@ -44,7 +44,7 @@ def start_questionnaire(patient_id):
         patient_id=patient_id,
         date=date.today(),
         status="in_progress",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(),
         current_question_order=1,
     )
     db.session.add(record)
@@ -77,7 +77,7 @@ def submit_answer():
     if record.status != "in_progress":
         return jsonify({"error": "Este cuestionario ya no está activo."}), 400
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     if record.started_at and (now - record.started_at) > timedelta(hours=1):
         record.status = "incomplete"
         db.session.commit()

@@ -1,7 +1,7 @@
 from datetime import date
 
 from app import db
-from app.models import Patient, ProtocolQuestion
+from app.models import Medication, Patient, ProtocolQuestion
 
 
 def seed_data():
@@ -73,4 +73,33 @@ def seed_data():
                 options=options,
             ))
 
+    db.session.commit()
+
+    medications = [
+        Medication(
+            patient_id=1,
+            name="Acetaminofén",
+            dose="500 mg",
+            schedule_times=["08:00", "14:00", "20:00"],
+        ),
+        Medication(
+            patient_id=1,
+            name="Amoxicilina",
+            dose="875 mg",
+            schedule_times=["09:00", "21:00"],
+        ),
+        Medication(
+            patient_id=2,
+            name="Ibuprofeno",
+            dose="400 mg",
+            schedule_times=["07:00", "15:00", "23:00"],
+        ),
+        Medication(
+            patient_id=3,
+            name="Cefalexina",
+            dose="500 mg",
+            schedule_times=["06:00", "14:00", "22:00"],
+        ),
+    ]
+    db.session.add_all(medications)
     db.session.commit()

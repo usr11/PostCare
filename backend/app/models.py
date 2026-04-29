@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app import db
 
@@ -14,7 +14,7 @@ class Patient(db.Model):
     surgery_date = db.Column(db.Date, nullable=False)
     onboarded = db.Column(db.Boolean, default=False)
     status = db.Column(db.String(20), default="pending")
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
 
     symptom_records = db.relationship("SymptomRecord", backref="patient", lazy=True)
     alerts = db.relationship("Alert", backref="patient", lazy=True)
@@ -85,7 +85,7 @@ class SymptomAnswer(db.Model):
     record_id = db.Column(db.Integer, db.ForeignKey("symptom_records.id"), nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey("protocol_questions.id"), nullable=False)
     answer_value = db.Column(db.String(200), nullable=False)
-    answered_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    answered_at = db.Column(db.DateTime, default=lambda: datetime.now())
 
     question = db.relationship("ProtocolQuestion", lazy=True)
 
@@ -108,7 +108,7 @@ class Message(db.Model):
     sender = db.Column(db.String(20), nullable=False)
     text = db.Column(db.Text, nullable=False)
     read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
 
     patient = db.relationship("Patient", backref=db.backref("messages", lazy=True))
 
@@ -123,6 +123,61 @@ class Message(db.Model):
         }
 
 
+class Medication(db.Model):
+    __tablename__ = "medications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    dose = db.Column(db.String(100), nullable=False)
+    schedule_times = db.Column(db.JSON, nullable=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
+
+    patient = db.relationship("Patient", backref=db.backref("medications", lazy=True))
+    reminders = db.relationship("MedicationReminder", backref="medication", lazy=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "name": self.name,
+            "dose": self.dose,
+            "schedule_times": self.schedule_times,
+            "active": self.active,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class MedicationReminder(db.Model):
+    __tablename__ = "medication_reminders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    medication_id = db.Column(db.Integer, db.ForeignKey("medications.id"), nullable=False)
+    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
+    scheduled_at = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), default="pending")
+    taken_at = db.Column(db.DateTime)
+    postponed = db.Column(db.Boolean, default=False)
+    postponed_to = db.Column(db.DateTime)
+
+    patient = db.relationship("Patient", backref=db.backref("reminders", lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "medication_id": self.medication_id,
+            "patient_id": self.patient_id,
+            "medication_name": self.medication.name if self.medication else None,
+            "medication_dose": self.medication.dose if self.medication else None,
+            "scheduled_at": self.scheduled_at.isoformat(),
+            "status": self.status,
+            "taken_at": self.taken_at.isoformat() if self.taken_at else None,
+            "postponed": self.postponed,
+            "postponed_to": self.postponed_to.isoformat() if self.postponed_to else None,
+        }
+
+
 class Alert(db.Model):
     __tablename__ = "alerts"
 
@@ -132,7 +187,7 @@ class Alert(db.Model):
     message = db.Column(db.Text, nullable=False)
     severity = db.Column(db.String(20), default="medium")
     status = db.Column(db.String(20), default="active")
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
     resolved_at = db.Column(db.DateTime)
 
     def to_dict(self):
