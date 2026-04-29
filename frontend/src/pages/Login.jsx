@@ -1,11 +1,23 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const navigate = useNavigate();
+  const [showClinicForm, setShowClinicForm] = useState(false);
+  const [clinicUser, setClinicUser] = useState("");
 
-  function handleRole(role) {
-    sessionStorage.setItem("role", role);
-    navigate(role === "patient" ? "/chat" : "/dashboard");
+  function handlePatient() {
+    sessionStorage.setItem("role", "patient");
+    sessionStorage.removeItem("clinicUser");
+    navigate("/chat");
+  }
+
+  function handleClinicSubmit(e) {
+    e.preventDefault();
+    if (!clinicUser.trim()) return;
+    sessionStorage.setItem("role", "clinic");
+    sessionStorage.setItem("clinicUser", clinicUser.trim());
+    navigate("/dashboard");
   }
 
   return (
@@ -27,7 +39,7 @@ export default function Login() {
           </p>
 
           <button
-            onClick={() => handleRole("patient")}
+            onClick={handlePatient}
             className="w-full flex items-center gap-4 px-6 py-4 rounded-xl border-2 border-gray-100 hover:border-primary hover:bg-sky-50 transition-all group"
           >
             <div className="w-12 h-12 rounded-full bg-sky-100 flex items-center justify-center shrink-0 group-hover:bg-sky-200 transition-colors">
@@ -43,22 +55,58 @@ export default function Login() {
             </div>
           </button>
 
-          <button
-            onClick={() => handleRole("clinic")}
-            className="w-full flex items-center gap-4 px-6 py-4 rounded-xl border-2 border-gray-100 hover:border-primary hover:bg-sky-50 transition-all group"
-          >
-            <div className="w-12 h-12 rounded-full bg-sky-100 flex items-center justify-center shrink-0 group-hover:bg-sky-200 transition-colors">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-              </svg>
-            </div>
-            <div className="text-left">
-              <p className="font-semibold text-gray-900">Panel Clínico</p>
+          {!showClinicForm ? (
+            <button
+              onClick={() => setShowClinicForm(true)}
+              className="w-full flex items-center gap-4 px-6 py-4 rounded-xl border-2 border-gray-100 hover:border-primary hover:bg-sky-50 transition-all group"
+            >
+              <div className="w-12 h-12 rounded-full bg-sky-100 flex items-center justify-center shrink-0 group-hover:bg-sky-200 transition-colors">
+                <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-gray-900">Panel Clínico</p>
+                <p className="text-xs text-gray-500">
+                  Monitorea pacientes y alertas
+                </p>
+              </div>
+            </button>
+          ) : (
+            <form onSubmit={handleClinicSubmit} className="space-y-3 pt-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Nombre completo del personal clínico
+              </label>
+              <input
+                type="text"
+                value={clinicUser}
+                onChange={(e) => setClinicUser(e.target.value)}
+                placeholder="Ej: Enf. Laura Pérez"
+                autoFocus
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
               <p className="text-xs text-gray-500">
-                Monitorea pacientes y alertas
+                Quedará registrado en el historial al cerrar alertas.
               </p>
-            </div>
-          </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowClinicForm(false)}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Atrás
+                </button>
+                <button
+                  type="submit"
+                  disabled={!clinicUser.trim()}
+                  className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-dark transition-colors disabled:opacity-50"
+                >
+                  Ingresar
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-8">

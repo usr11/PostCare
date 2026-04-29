@@ -11,41 +11,84 @@ function StatCard({ label, value, color = "text-gray-900" }) {
   );
 }
 
+const BOARD_BADGE = {
+  verde: "bg-green-100 text-green-700",
+  amarillo: "bg-amber-100 text-amber-700",
+  rojo: "bg-red-100 text-red-700",
+};
+
+const BOARD_LABEL = {
+  verde: "Verde",
+  amarillo: "Amarillo",
+  rojo: "Rojo",
+};
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [patients, setPatients] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resolveAlert, setResolveAlert] = useState(null);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveError, setResolveError] = useState("");
+  const [resolving, setResolving] = useState(false);
+
+  const clinicUser = sessionStorage.getItem("clinicUser") || "Personal clínico";
+
+  async function reloadAll() {
+    try {
+      const [s, p, a] = await Promise.all([
+        api.getStats(),
+        api.getPatients(),
+        api.getAlerts(),
+      ]);
+      setStats(s);
+      setPatients(p);
+      setAlerts(a);
+    } catch (err) {
+      console.error("Error loading dashboard:", err);
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [s, p, a] = await Promise.all([
-          api.getStats(),
-          api.getPatients(),
-          api.getAlerts(),
-        ]);
-        setStats(s);
-        setPatients(p);
-        setAlerts(a);
-      } catch (err) {
-        console.error("Error loading dashboard:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    reloadAll().finally(() => setLoading(false));
+    const interval = setInterval(reloadAll, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  async function handleResolve(alertId) {
+  function openResolve(alert) {
+    setResolveAlert(alert);
+    setResolveNote("");
+    setResolveError("");
+  }
+
+  async function submitResolve(e) {
+    e.preventDefault();
+    if (!resolveAlert || !resolveNote.trim()) return;
+    setResolving(true);
+    setResolveError("");
     try {
-      await api.resolveAlert(alertId);
-      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+      await api.resolveAlert(resolveAlert.id, {
+        note: resolveNote.trim(),
+        resolved_by: clinicUser,
+        version: resolveAlert.version,
+      });
+      setAlerts((prev) => prev.filter((a) => a.id !== resolveAlert.id));
       setStats((prev) =>
-        prev ? { ...prev, active_alerts: prev.active_alerts - 1 } : prev
+        prev ? { ...prev, active_alerts: Math.max(0, prev.active_alerts - 1) } : prev
       );
+      setResolveAlert(null);
+      reloadAll();
     } catch (err) {
-      console.error("Error resolving alert:", err);
+      if (err.status === 409) {
+        setResolveError(
+          err.error || "Otro usuario actualizó esta alerta. Recarga e intenta de nuevo."
+        );
+      } else {
+        setResolveError(err.error || "No fue posible cerrar la alerta.");
+      }
+    } finally {
+      setResolving(false);
     }
   }
 
@@ -118,10 +161,10 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <button
-                  onClick={() => handleResolve(alert.id)}
-                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={() => openResolve(alert)}
+                  className="px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                 >
-                  Resolver
+                  Cerrar caso
                 </button>
               </div>
             ))}
@@ -147,6 +190,9 @@ export default function Dashboard() {
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
                   Estado
                 </th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                  Tablero
+                </th>
                 <th className="px-6 py-3" />
               </tr>
             </thead>
@@ -170,10 +216,23 @@ export default function Dashboard() {
                       className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                         p.status === "active"
                           ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
+                          : p.status === "data_error"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {p.status === "active" ? "Activo" : "Pendiente"}
+                      {p.status === "active"
+                        ? "Activo"
+                        : p.status === "data_error"
+                          ? "Datos por corregir"
+                          : "Pendiente"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium ${BOARD_BADGE[p.board_status] || "bg-gray-100 text-gray-600"}`}
+                    >
+                      {BOARD_LABEL[p.board_status] || p.board_status}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -190,6 +249,75 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+
+      {resolveAlert && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <form
+            onSubmit={submitResolve}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  resolveAlert.alert_type === "sos"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {resolveAlert.alert_type === "sos" ? "S.O.S." : "Alerta"}
+              </span>
+              <h3 className="text-lg font-bold text-gray-900">
+                Cerrar caso de {resolveAlert.patient_name}
+              </h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">{resolveAlert.message}</p>
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Responsable
+            </label>
+            <input
+              type="text"
+              value={clinicUser}
+              readOnly
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 mb-4"
+            />
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nota / observación <span className="text-danger">*</span>
+            </label>
+            <textarea
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+              rows={4}
+              required
+              placeholder="Describe el contacto realizado, instrucciones dadas, etc."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent mb-2"
+            />
+
+            {resolveError && (
+              <p className="text-sm text-danger mb-3">{resolveError}</p>
+            )}
+
+            <div className="flex gap-3 justify-end mt-2">
+              <button
+                type="button"
+                onClick={() => setResolveAlert(null)}
+                disabled={resolving}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={resolving || !resolveNote.trim()}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-dark transition-colors disabled:opacity-50"
+              >
+                {resolving ? "Guardando..." : "Cerrar caso"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

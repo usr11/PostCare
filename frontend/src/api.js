@@ -40,10 +40,23 @@ export const api = {
       body: JSON.stringify({ patient_id, message }),
     }),
 
+  cancelSOS: (alert_id, note) =>
+    request(`/sos/cancel/${alert_id}`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+
   getPatients: () => request("/dashboard/patients"),
   getPatient: (id) => request(`/dashboard/patients/${id}`),
   getAlerts: (status = "active") => request(`/dashboard/alerts?status=${status}`),
-  resolveAlert: (id) => request(`/dashboard/alerts/${id}/resolve`, { method: "POST" }),
+  getAlert: (id) => request(`/dashboard/alerts/${id}`),
+  resolveAlert: (id, { note, resolved_by, version }) =>
+    request(`/dashboard/alerts/${id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ note, resolved_by, version }),
+    }),
+  getAlertHistory: (patient_id) =>
+    request(`/dashboard/alerts/history/${patient_id}`),
   getStats: () => request("/dashboard/stats"),
 
   sendMessage: (patient_id, sender, text) =>
@@ -80,4 +93,10 @@ export const api = {
 
   getReminderHistory: (patient_id) =>
     request(`/medications/reminders/history/${patient_id}`),
+
+  chatWithAI: (patient_id, message, history) =>
+    request("/chat/ai", {
+      method: "POST",
+      body: JSON.stringify({ patient_id, message, history }),
+    }),
 };

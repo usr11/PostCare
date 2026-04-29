@@ -6,6 +6,9 @@ from app.models import Message, Patient
 messages_bp = Blueprint("messages", __name__)
 
 
+DOCTOR_PREFIX = "[Aviso Médico]:"
+
+
 @messages_bp.route("/send", methods=["POST"])
 def send_message():
     data = request.get_json()
@@ -19,6 +22,9 @@ def send_message():
         return jsonify({"error": "Sender inválido"}), 400
 
     db.get_or_404(Patient, patient_id)
+
+    if sender == "doctor" and not text.startswith(DOCTOR_PREFIX):
+        text = f"{DOCTOR_PREFIX} {text}"
 
     message = Message(
         patient_id=patient_id,

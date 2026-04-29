@@ -10,6 +10,7 @@ const PHASES = {
   ONBOARDED: "onboarded",
   QUESTIONNAIRE: "questionnaire",
   COMPLETED: "completed",
+  EMERGENCY: "emergency",
   ERROR: "error",
 };
 
@@ -32,6 +33,9 @@ export default function PatientChat() {
   const [loading, setLoading] = useState(false);
   const [lastMsgId, setLastMsgId] = useState(0);
   const [questionnaireStartedAt, setQuestionnaireStartedAt] = useState(null);
+  const [aiHistory, setAiHistory] = useState([]);
+  const [activeSOSAlertId, setActiveSOSAlertId] = useState(null);
+  const [previousPhase, setPreviousPhase] = useState(null);
   const messagesEndRef = useRef(null);
   const seenReminderIds = useRef(new Set());
 
@@ -83,7 +87,7 @@ export default function PatientChat() {
           if (!last.postponed) {
             btns.push({ label: "Posponer 1 hora", value: `med_postpone_${last.id}` });
           }
-          if (phase !== PHASES.QUESTIONNAIRE) {
+          if (phase !== PHASES.QUESTIONNAIRE && phase !== PHASES.EMERGENCY) {
             setButtons(btns);
           }
         }
@@ -140,11 +144,16 @@ export default function PatientChat() {
           { label: "No, hay un error", value: "no" },
         ]);
         setPhase(PHASES.CONFIRM_IDENTITY);
-      } catch {
-        addMessage(
-          "bot",
-          "No encuentro este documento. Comunícate con tu clínica."
-        );
+      } catch (err) {
+        if (err.status === 423) {
+          addMessage("bot", err.message);
+          setPhase(PHASES.ERROR);
+        } else {
+          addMessage(
+            "bot",
+            "No encuentro este documento. Comunícate con tu clínica."
+          );
+        }
       } finally {
         setLoading(false);
       }
@@ -165,16 +174,38 @@ export default function PatientChat() {
 
     if (patient && (phase === PHASES.ONBOARDED || phase === PHASES.COMPLETED)) {
       addMessage("user", userInput);
+      setLoading(true);
       try {
-        await api.sendMessage(patient.id, "patient", userInput);
-      } catch {
-        addMessage("bot", "No se pudo enviar tu mensaje. Intenta de nuevo.");
+        const newHistory = [...aiHistory, { role: "user", content: userInput }];
+        const data = await api.chatWithAI(patient.id, userInput, aiHistory);
+        addMessage("bot", data.reply);
+        setAiHistory([...newHistory, { role: "assistant", content: data.reply }]);
+        if (data.suggest_sos) {
+          setButtons([{ label: "🚨 Abrir S.O.S.", value: "__sos__" }]);
+        }
+        api.sendMessage(patient.id, "patient", userInput).catch(() => {});
+      } catch (err) {
+        addMessage("bot", err.error || "No pude procesar tu mensaje. Intenta de nuevo.");
+      } finally {
+        setLoading(false);
       }
       return;
     }
   }
 
   async function handleButtonSelect(option) {
+    if (option.value === "__sos__") {
+      setButtons(null);
+      setShowSOSConfirm(true);
+      return;
+    }
+
+    if (option.value === "__cancel_sos__") {
+      addMessage("user", option.label);
+      handleCancelFalseAlarm();
+      return;
+    }
+
     setButtons(null);
     addMessage("user", option.label);
     setLoading(true);
@@ -262,9 +293,36 @@ export default function PatientChat() {
     setLoading(true);
     try {
       const data = await api.triggerSOS(patient.id);
+      // HU 1: interrumpir flujo activo (cuestionario, recordatorios, AI chat).
+      setPreviousPhase(phase);
+      setPhase(PHASES.EMERGENCY);
+      setCurrentQuestion(null);
+      setQuestionnaireStartedAt(null);
+      setActiveSOSAlertId(data.alert_id);
       addMessage("bot", data.message);
+      setButtons([
+        { label: "Cancelar falsa alarma", value: "__cancel_sos__" },
+      ]);
     } catch {
       addMessage("bot", "Error al enviar la alerta. Llama al 123 de inmediato.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCancelFalseAlarm() {
+    if (!activeSOSAlertId) return;
+    setButtons(null);
+    setLoading(true);
+    try {
+      const data = await api.cancelSOS(activeSOSAlertId, "Falsa alarma reportada por el paciente.");
+      addMessage("bot", data.message);
+      setActiveSOSAlertId(null);
+      setPhase(previousPhase === PHASES.QUESTIONNAIRE ? PHASES.ONBOARDED : (previousPhase || PHASES.ONBOARDED));
+      setPreviousPhase(null);
+    } catch (err) {
+      addMessage("bot", err.error || "No fue posible cancelar la alerta.");
+      setButtons([{ label: "Cancelar falsa alarma", value: "__cancel_sos__" }]);
     } finally {
       setLoading(false);
     }
@@ -280,6 +338,8 @@ export default function PatientChat() {
     phase === PHASES.ONBOARDED ||
     phase === PHASES.COMPLETED ||
     (phase === PHASES.QUESTIONNAIRE && !buttons);
+
+  const sosDisabled = phase === PHASES.EMERGENCY || loading;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white flex flex-col">
@@ -368,10 +428,10 @@ export default function PatientChat() {
         </div>
       )}
 
-      {patient && (
+      {patient && phase !== PHASES.ERROR && (
         <button
           onClick={() => setShowSOSConfirm(true)}
-          disabled={loading}
+          disabled={sosDisabled}
           className="fixed bottom-6 right-6 w-16 h-16 bg-danger text-white rounded-full shadow-lg shadow-red-300 hover:bg-danger-dark transition-all hover:scale-110 disabled:opacity-50 flex items-center justify-center z-50"
         >
           <div className="text-center leading-tight">

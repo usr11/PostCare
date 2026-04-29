@@ -19,6 +19,22 @@ def start_questionnaire(patient_id):
     if existing and existing.status == "completed":
         return jsonify({"error": "Ya completaste el cuestionario de hoy."}), 400
 
+    if existing and existing.status == "pending":
+        # Record creado por el scheduler diario — el paciente lo está abriendo ahora.
+        existing.status = "in_progress"
+        existing.started_at = datetime.now()
+        existing.current_question_order = 1
+        db.session.commit()
+        first_question = ProtocolQuestion.query.filter_by(
+            surgery_type=patient.surgery_type, order=1
+        ).first()
+        return jsonify({
+            "record_id": existing.id,
+            "question": first_question.to_dict() if first_question else None,
+            "status": "in_progress",
+            "message": "Hola, es hora de tu seguimiento diario. Vamos a revisar cómo te sientes hoy.",
+        })
+
     if existing and existing.status == "in_progress":
         now = datetime.now()
         if existing.started_at and (now - existing.started_at) > timedelta(hours=1):

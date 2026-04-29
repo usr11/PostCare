@@ -36,5 +36,11 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        from app.migrate import run_migrations
+        run_migrations()
+
+    if app.config.get("ENABLE_SCHEDULER", True):
+        from app.scheduler import start_scheduler
+        start_scheduler(app)
 
     return app

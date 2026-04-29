@@ -16,11 +16,14 @@ export default function PatientDetail() {
   const [medForm, setMedForm] = useState({ name: "", dose: "", times: "" });
   const [addingMed, setAddingMed] = useState(false);
 
+  const [alertHistory, setAlertHistory] = useState([]);
+
   useEffect(() => {
     api.getPatient(id).then(setData).catch(console.error).finally(() => setLoading(false));
     api.getMessages(id).then(setMessages).catch(console.error);
     api.getMedications(id).then(setMedications).catch(console.error);
     api.getReminderHistory(id).then(setReminderHistory).catch(console.error);
+    api.getAlertHistory(id).then(setAlertHistory).catch(console.error);
   }, [id]);
 
   useEffect(() => {
@@ -143,16 +146,52 @@ export default function PatientDetail() {
                   }`}
                 >
                   <span className={`text-xs font-medium ${alert.status === "active" ? "text-red-700" : "text-gray-500"}`}>
-                    {alert.alert_type === "sos" ? "S.O.S." : "Alerta"} - {alert.status === "active" ? "Activa" : "Resuelta"}
+                    {alert.alert_type === "sos" ? "S.O.S." : "Alerta"} - {alert.status === "active" ? "Activa" : alert.status === "cancelled" ? "Cancelada" : "Resuelta"}
                   </span>
                   <p className="text-sm text-gray-700">{alert.message}</p>
                   <p className="text-xs text-gray-400 mt-1">{new Date(alert.created_at).toLocaleString("es-CO")}</p>
+                  {alert.resolved_at && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-600">
+                      <p><strong>Cerrada por:</strong> {alert.resolved_by || "—"}</p>
+                      <p><strong>Cuándo:</strong> {new Date(alert.resolved_at).toLocaleString("es-CO")}</p>
+                      {alert.resolution_note && (
+                        <p className="mt-1"><strong>Nota:</strong> {alert.resolution_note}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {alertHistory.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Historial de cierres</h2>
+          <div className="space-y-3">
+            {alertHistory.map((a) => (
+              <div key={a.id} className="border-l-4 border-gray-300 pl-3 py-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-500">
+                    {a.alert_type === "sos" ? "S.O.S." : "Alerta"} · {a.status === "cancelled" ? "Cancelada" : "Resuelta"}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {a.resolved_at && new Date(a.resolved_at).toLocaleString("es-CO")}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-700 mt-1">{a.message}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Cerrada por <strong>{a.resolved_by || "—"}</strong>
+                </p>
+                {a.resolution_note && (
+                  <p className="text-xs text-gray-600 mt-0.5 italic">"{a.resolution_note}"</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Medicamentos */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

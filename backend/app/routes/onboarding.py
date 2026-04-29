@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app import db
-from app.models import Patient
+from app.models import Alert, Patient
 
 onboarding_bp = Blueprint("onboarding", __name__)
 
@@ -21,6 +21,16 @@ def verify_document():
             "found": False,
             "message": "No encuentro este documento. Comunícate con tu clínica.",
         }), 404
+
+    if patient.status == "data_error":
+        return jsonify({
+            "found": True,
+            "blocked": True,
+            "message": (
+                "Tu registro está pausado por una corrección de datos pendiente. "
+                f"Por favor llama a admisiones al {current_app.config['CLINIC_ADMISSIONS_PHONE']}."
+            ),
+        }), 423
 
     return jsonify({
         "found": True,
@@ -42,11 +52,27 @@ def confirm_identity():
     patient = db.get_or_404(Patient, patient_id)
 
     if not confirmed:
+        # HU 6: pausa el flujo y crea alerta para que admisiones intervenga.
+        patient.status = "data_error"
+        existing_alert = Alert.query.filter_by(
+            patient_id=patient.id, alert_type="data_error", status="active"
+        ).first()
+        if not existing_alert:
+            db.session.add(Alert(
+                patient_id=patient.id,
+                alert_type="data_error",
+                message="El paciente reporta que sus datos de registro son incorrectos.",
+                severity="medium",
+                status="active",
+            ))
+        db.session.commit()
         return jsonify({
             "confirmed": False,
+            "paused": True,
             "message": (
-                "Lamentamos el inconveniente. Por favor comunícate con admisiones "
-                "al teléfono (601) 123-4567 para corregir tus datos."
+                "Lamentamos el inconveniente. Por favor comunícate con admisiones al "
+                f"{current_app.config['CLINIC_ADMISSIONS_PHONE']} para corregir tus datos. "
+                "Hemos pausado tu seguimiento hasta que la información sea verificada."
             ),
         })
 

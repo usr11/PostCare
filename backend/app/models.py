@@ -14,10 +14,20 @@ class Patient(db.Model):
     surgery_date = db.Column(db.Date, nullable=False)
     onboarded = db.Column(db.Boolean, default=False)
     status = db.Column(db.String(20), default="pending")
+    daily_questionnaire_time = db.Column(db.String(5), default="09:00")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now())
 
     symptom_records = db.relationship("SymptomRecord", backref="patient", lazy=True)
     alerts = db.relationship("Alert", backref="patient", lazy=True)
+
+    @property
+    def board_status(self):
+        active = [a for a in self.alerts if a.status == "active"]
+        if any(a.severity == "critical" for a in active):
+            return "rojo"
+        if active:
+            return "amarillo"
+        return "verde"
 
     def to_dict(self):
         return {
@@ -29,6 +39,8 @@ class Patient(db.Model):
             "surgery_date": self.surgery_date.isoformat(),
             "onboarded": self.onboarded,
             "status": self.status,
+            "daily_questionnaire_time": self.daily_questionnaire_time,
+            "board_status": self.board_status,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -189,6 +201,9 @@ class Alert(db.Model):
     status = db.Column(db.String(20), default="active")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now())
     resolved_at = db.Column(db.DateTime)
+    resolved_by = db.Column(db.String(120))
+    resolution_note = db.Column(db.Text)
+    version = db.Column(db.Integer, nullable=False, default=1)
 
     def to_dict(self):
         return {
@@ -201,4 +216,7 @@ class Alert(db.Model):
             "status": self.status,
             "created_at": self.created_at.isoformat(),
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "resolved_by": self.resolved_by,
+            "resolution_note": self.resolution_note,
+            "version": self.version,
         }
