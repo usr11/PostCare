@@ -1,8 +1,12 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from dotenv import load_dotenv
+import os
 
 from app.config import Config
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 db = SQLAlchemy()
 
@@ -14,6 +18,7 @@ def create_app():
     CORS(app)
     db.init_app(app)
 
+    from app.routes.chat import chat_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.medications import medications_bp
     from app.routes.messages import messages_bp
@@ -27,6 +32,7 @@ def create_app():
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(messages_bp, url_prefix="/api/messages")
     app.register_blueprint(medications_bp, url_prefix="/api/medications")
+    app.register_blueprint(chat_bp, url_prefix="/api/chat")
 
     with app.app_context():
         db.create_all()
