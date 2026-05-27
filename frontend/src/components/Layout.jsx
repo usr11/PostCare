@@ -1,11 +1,13 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  function handleLogout() {
-    sessionStorage.removeItem("role");
+  async function handleLogout() {
+    await logout();
     navigate("/login");
   }
 
@@ -32,7 +34,9 @@ export default function Layout() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">Panel Clínico</span>
+              <span className="text-sm text-gray-500">
+                {user?.full_name || "Panel Clínico"}
+              </span>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-danger rounded-lg hover:bg-red-50 transition-colors"

@@ -1,23 +1,34 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [showClinicForm, setShowClinicForm] = useState(false);
-  const [clinicUser, setClinicUser] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   function handlePatient() {
     sessionStorage.setItem("role", "patient");
-    sessionStorage.removeItem("clinicUser");
     navigate("/chat");
   }
 
-  function handleClinicSubmit(e) {
+  async function handleClinicSubmit(e) {
     e.preventDefault();
-    if (!clinicUser.trim()) return;
-    sessionStorage.setItem("role", "clinic");
-    sessionStorage.setItem("clinicUser", clinicUser.trim());
-    navigate("/dashboard");
+    if (!email.trim() || !password) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await login(email.trim().toLowerCase(), password);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.error || "No fue posible iniciar sesión.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -75,34 +86,47 @@ export default function Login() {
           ) : (
             <form onSubmit={handleClinicSubmit} className="space-y-3 pt-2">
               <label className="block text-sm font-medium text-gray-700">
-                Nombre completo del personal clínico
+                Correo institucional
               </label>
               <input
-                type="text"
-                value={clinicUser}
-                onChange={(e) => setClinicUser(e.target.value)}
-                placeholder="Ej: Enf. Laura Pérez"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Ej: clinico1@postcare.co"
                 autoFocus
                 required
                 className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
-              <p className="text-xs text-gray-500">
-                Quedará registrado en el historial al cerrar alertas.
-              </p>
+              <label className="block text-sm font-medium text-gray-700">
+                Contraseña
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
+              {error && <p className="text-sm text-danger">{error}</p>}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowClinicForm(false)}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setShowClinicForm(false);
+                    setError("");
+                  }}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   Atrás
                 </button>
                 <button
                   type="submit"
-                  disabled={!clinicUser.trim()}
+                  disabled={submitting || !email.trim() || !password}
                   className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-dark transition-colors disabled:opacity-50"
                 >
-                  Ingresar
+                  {submitting ? "Ingresando..." : "Ingresar"}
                 </button>
               </div>
             </form>

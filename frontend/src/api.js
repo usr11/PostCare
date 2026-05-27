@@ -1,16 +1,33 @@
 const API_BASE = "/api";
 
+let onUnauthorized = null;
+export function setUnauthorizedHandler(fn) {
+  onUnauthorized = fn;
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     ...options,
   });
   const data = await res.json();
+  if (res.status === 401 && onUnauthorized && !path.startsWith("/auth/")) {
+    onUnauthorized();
+  }
   if (!res.ok) throw { status: res.status, ...data };
   return data;
 }
 
 export const api = {
+  login: (email, password) =>
+    request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  logout: () => request("/auth/logout", { method: "POST" }),
+  me: () => request("/auth/me"),
+
   verifyDocument: (document_number) =>
     request("/onboarding/verify", {
       method: "POST",
@@ -50,10 +67,10 @@ export const api = {
   getPatient: (id) => request(`/dashboard/patients/${id}`),
   getAlerts: (status = "active") => request(`/dashboard/alerts?status=${status}`),
   getAlert: (id) => request(`/dashboard/alerts/${id}`),
-  resolveAlert: (id, { note, resolved_by, version }) =>
+  resolveAlert: (id, { note, version }) =>
     request(`/dashboard/alerts/${id}/resolve`, {
       method: "POST",
-      body: JSON.stringify({ note, resolved_by, version }),
+      body: JSON.stringify({ note, version }),
     }),
   getAlertHistory: (patient_id) =>
     request(`/dashboard/alerts/history/${patient_id}`),

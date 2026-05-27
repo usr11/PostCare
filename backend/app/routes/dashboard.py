@@ -1,22 +1,45 @@
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
+from flask_login import current_user
 
 from app import db
+from app.auth import require_role
 from app.models import Alert, Patient, SymptomRecord
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
+READ_ROLES = ("clinician", "admin", "quality_lead", "admissions")
+RESOLVE_ROLES = ("clinician", "admin")
+
+
+def _scope_patients(query):
+    """Limita los pacientes a los que el usuario actual puede ver."""
+    if current_user.role == "clinician":
+        return query.filter(Patient.clinician_id == current_user.id)
+    return query
+
+
+def _can_access_patient(patient):
+    if current_user.role == "clinician":
+        return patient.clinician_id == current_user.id
+    return current_user.role in ("admin", "quality_lead", "admissions")
+
+
 @dashboard_bp.route("/patients", methods=["GET"])
+@require_role(*READ_ROLES)
 def list_patients():
-    patients = Patient.query.order_by(Patient.created_at.desc()).all()
+    patients = _scope_patients(Patient.query).order_by(Patient.created_at.desc()).all()
     return jsonify([p.to_dict() for p in patients])
 
 
 @dashboard_bp.route("/patients/<int:patient_id>", methods=["GET"])
+@require_role(*READ_ROLES)
 def get_patient(patient_id):
     patient = db.get_or_404(Patient, patient_id)
+    if not _can_access_patient(patient):
+        return jsonify({"error": "No tienes acceso a este paciente"}), 403
     records = (
         SymptomRecord.query
         .filter_by(patient_id=patient_id)
@@ -37,36 +60,43 @@ def get_patient(patient_id):
 
 
 @dashboard_bp.route("/alerts", methods=["GET"])
+@require_role(*READ_ROLES)
 def list_alerts():
     status = request.args.get("status", "active")
-    query = Alert.query
+    query = Alert.query.join(Patient, Alert.patient_id == Patient.id)
     if status != "all":
-        query = query.filter_by(status=status)
+        query = query.filter(Alert.status == status)
+    if current_user.role == "clinician":
+        query = query.filter(Patient.clinician_id == current_user.id)
     alerts = query.order_by(Alert.created_at.desc()).all()
     return jsonify([a.to_dict() for a in alerts])
 
 
 @dashboard_bp.route("/alerts/<int:alert_id>", methods=["GET"])
+@require_role(*READ_ROLES)
 def get_alert(alert_id):
     alert = db.get_or_404(Alert, alert_id)
+    if not _can_access_patient(alert.patient):
+        return jsonify({"error": "No tienes acceso a esta alerta"}), 403
     return jsonify(alert.to_dict())
 
 
 @dashboard_bp.route("/alerts/<int:alert_id>/resolve", methods=["POST"])
+@require_role(*RESOLVE_ROLES)
 def resolve_alert(alert_id):
     """HU 3: cierre de alerta con nota obligatoria, registro de usuario,
     y control de concurrencia mediante optimistic locking."""
     data = request.get_json(silent=True) or {}
     note = (data.get("note") or "").strip()
-    resolved_by = (data.get("resolved_by") or "").strip()
     expected_version = data.get("version")
 
     if not note:
         return jsonify({"error": "La nota u observación es obligatoria para cerrar la alerta."}), 400
-    if not resolved_by:
-        return jsonify({"error": "Debes identificarte para cerrar la alerta."}), 400
 
     alert = db.get_or_404(Alert, alert_id)
+
+    if not _can_access_patient(alert.patient):
+        return jsonify({"error": "No tienes acceso a esta alerta"}), 403
 
     if alert.status != "active":
         return jsonify({
@@ -86,7 +116,7 @@ def resolve_alert(alert_id):
 
     alert.status = "resolved"
     alert.resolved_at = datetime.now(timezone.utc)
-    alert.resolved_by = resolved_by
+    alert.resolved_by = current_user.full_name
     alert.resolution_note = note
     alert.version = (alert.version or 1) + 1
 
@@ -104,8 +134,11 @@ def resolve_alert(alert_id):
 
 
 @dashboard_bp.route("/alerts/history/<int:patient_id>", methods=["GET"])
+@require_role(*READ_ROLES)
 def alert_history(patient_id):
-    db.get_or_404(Patient, patient_id)
+    patient = db.get_or_404(Patient, patient_id)
+    if not _can_access_patient(patient):
+        return jsonify({"error": "No tienes acceso a este paciente"}), 403
     alerts = (
         Alert.query
         .filter_by(patient_id=patient_id)
@@ -118,13 +151,29 @@ def alert_history(patient_id):
 
 
 @dashboard_bp.route("/stats", methods=["GET"])
+@require_role(*READ_ROLES)
 def get_stats():
-    total_patients = Patient.query.count()
-    active_patients = Patient.query.filter_by(status="active").count()
-    active_alerts = Alert.query.filter_by(status="active").count()
-    sos_alerts = Alert.query.filter_by(alert_type="sos", status="active").count()
-    completed_today = SymptomRecord.query.filter_by(status="completed").count()
-    incomplete_today = SymptomRecord.query.filter_by(status="incomplete").count()
+    patient_q = _scope_patients(Patient.query)
+    total_patients = patient_q.count()
+    active_patients = patient_q.filter(Patient.status == "active").count()
+
+    alert_q = Alert.query
+    if current_user.role == "clinician":
+        alert_q = alert_q.join(Patient, Alert.patient_id == Patient.id).filter(
+            Patient.clinician_id == current_user.id
+        )
+    active_alerts = alert_q.filter(Alert.status == "active").count()
+    sos_alerts = alert_q.filter(
+        Alert.alert_type == "sos", Alert.status == "active"
+    ).count()
+
+    record_q = SymptomRecord.query
+    if current_user.role == "clinician":
+        record_q = record_q.join(Patient, SymptomRecord.patient_id == Patient.id).filter(
+            Patient.clinician_id == current_user.id
+        )
+    completed_today = record_q.filter(SymptomRecord.status == "completed").count()
+    incomplete_today = record_q.filter(SymptomRecord.status == "incomplete").count()
 
     return jsonify({
         "total_patients": total_patients,

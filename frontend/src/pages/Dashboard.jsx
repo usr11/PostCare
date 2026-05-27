@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../contexts/AuthContext";
 
 function StatCard({ label, value, color = "text-gray-900" }) {
   return (
@@ -33,7 +34,8 @@ export default function Dashboard() {
   const [resolveError, setResolveError] = useState("");
   const [resolving, setResolving] = useState(false);
 
-  const clinicUser = sessionStorage.getItem("clinicUser") || "Personal clínico";
+  const { user } = useAuth();
+  const clinicUser = user?.full_name || "Personal clínico";
 
   async function reloadAll() {
     try {
@@ -70,7 +72,6 @@ export default function Dashboard() {
     try {
       await api.resolveAlert(resolveAlert.id, {
         note: resolveNote.trim(),
-        resolved_by: clinicUser,
         version: resolveAlert.version,
       });
       setAlerts((prev) => prev.filter((a) => a.id !== resolveAlert.id));

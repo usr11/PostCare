@@ -1,6 +1,40 @@
 from datetime import datetime
 
+from flask_login import UserMixin
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from app import db
+
+
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    full_name = db.Column(db.String(120), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
+
+    def set_password(self, raw):
+        self.password_hash = generate_password_hash(raw)
+
+    def check_password(self, raw):
+        return check_password_hash(self.password_hash, raw)
+
+    @property
+    def is_active(self):
+        return bool(self.active)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "full_name": self.full_name,
+            "role": self.role,
+            "active": self.active,
+        }
 
 
 class Patient(db.Model):
@@ -15,8 +49,10 @@ class Patient(db.Model):
     onboarded = db.Column(db.Boolean, default=False)
     status = db.Column(db.String(20), default="pending")
     daily_questionnaire_time = db.Column(db.String(5), default="09:00")
+    clinician_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now())
 
+    clinician = db.relationship("User", lazy=True, foreign_keys=[clinician_id])
     symptom_records = db.relationship("SymptomRecord", backref="patient", lazy=True)
     alerts = db.relationship("Alert", backref="patient", lazy=True)
 
@@ -41,6 +77,8 @@ class Patient(db.Model):
             "status": self.status,
             "daily_questionnaire_time": self.daily_questionnaire_time,
             "board_status": self.board_status,
+            "clinician_id": self.clinician_id,
+            "clinician_name": self.clinician.full_name if self.clinician else None,
             "created_at": self.created_at.isoformat(),
         }
 

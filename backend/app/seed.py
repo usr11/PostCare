@@ -1,12 +1,48 @@
 from datetime import date
 
 from app import db
-from app.models import Medication, Patient, ProtocolQuestion
+from app.models import Medication, Patient, ProtocolQuestion, User
+
+
+def _seed_users():
+    if User.query.first():
+        return
+
+    specs = [
+        ("clinico1@postcare.co", "clinico123", "Dra. Laura Pérez", "clinician"),
+        ("clinico2@postcare.co", "clinico123", "Dr. Andrés Gómez", "clinician"),
+        ("clinico3@postcare.co", "clinico123", "Enf. María Torres", "clinician"),
+        ("admisiones@postcare.co", "admisiones123", "Admisiones PostCare", "admissions"),
+        ("calidad@postcare.co", "calidad123", "Jefe de Calidad", "quality_lead"),
+        ("admin@postcare.co", "admin123", "Administrador", "admin"),
+    ]
+    for email, pwd, name, role in specs:
+        u = User(email=email, full_name=name, role=role)
+        u.set_password(pwd)
+        db.session.add(u)
+    db.session.commit()
+
+
+def _backfill_clinician_assignments():
+    """Asigna en round-robin los pacientes existentes sin clínico."""
+    clinicians = User.query.filter_by(role="clinician", active=True).order_by(User.id).all()
+    if not clinicians:
+        return
+    unassigned = Patient.query.filter_by(clinician_id=None).all()
+    for i, p in enumerate(unassigned):
+        p.clinician_id = clinicians[i % len(clinicians)].id
+    if unassigned:
+        db.session.commit()
 
 
 def seed_data():
+    _seed_users()
+
     if Patient.query.first():
+        _backfill_clinician_assignments()
         return
+
+    clinicians = User.query.filter_by(role="clinician", active=True).order_by(User.id).all()
 
     patients = [
         Patient(
@@ -15,6 +51,7 @@ def seed_data():
             phone="3001234567",
             surgery_type="Apendicectomía",
             surgery_date=date(2026, 4, 18),
+            clinician_id=clinicians[0].id if clinicians else None,
         ),
         Patient(
             document_number="0987654321",
@@ -22,6 +59,7 @@ def seed_data():
             phone="3109876543",
             surgery_type="Colecistectomía",
             surgery_date=date(2026, 4, 19),
+            clinician_id=clinicians[1].id if len(clinicians) > 1 else None,
         ),
         Patient(
             document_number="1122334455",
@@ -29,6 +67,7 @@ def seed_data():
             phone="3201122334",
             surgery_type="Hernia Inguinal",
             surgery_date=date(2026, 4, 20),
+            clinician_id=clinicians[2].id if len(clinicians) > 2 else None,
         ),
     ]
     db.session.add_all(patients)
