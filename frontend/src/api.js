@@ -160,4 +160,44 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ clinician_id }),
     }),
+
+  // HU1 — Evidencia visual (fotos de heridas).
+  uploadWoundImage: async (patient_id, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/uploads/wound/${patient_id}`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: "Respuesta inválida del servidor." };
+    }
+    if (!res.ok) throw { status: res.status, ...data };
+    return data;
+  },
+  // URL pública firmada por patient_id para que el chat (sin auth) la pueda mostrar.
+  woundImageUrl: (image_id, patient_id) =>
+    `${API_BASE}/uploads/wound/${image_id}?patient_id=${patient_id}`,
+  // URL para clínicos autenticados.
+  woundImageAuthUrl: (image_id) => `${API_BASE}/uploads/wound/${image_id}`,
+  listPatientWoundImages: (patient_id) =>
+    request(`/uploads/wound/patient/${patient_id}`),
+
+  // HU4 — Timeline unificada.
+  getPatientTimeline: (patient_id, params = {}) => {
+    const q = new URLSearchParams();
+    if (params.filter) q.set("filter", params.filter);
+    if (params.from) q.set("from", params.from);
+    if (params.to) q.set("to", params.to);
+    if (params.before) q.set("before", params.before);
+    if (params.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request(
+      `/dashboard/patients/${patient_id}/timeline${qs ? `?${qs}` : ""}`,
+    );
+  },
 };

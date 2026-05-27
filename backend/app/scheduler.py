@@ -103,9 +103,10 @@ def _create_daily_symptom_records():
 
 
 def _send_appointment_reminders():
-    """HU-07: marca el recordatorio de citas cuando faltan ≤ 24h.
+    """HU-07/HU2: marca el recordatorio de citas cuando faltan ≤ 24h.
 
     El paciente las descubre vía polling en /api/appointments/upcoming/<id>.
+    Idempotencia: sólo se marcan citas con reminder_sent_at NULL.
     """
     from app import db
     from app.models import Appointment
@@ -126,6 +127,31 @@ def _send_appointment_reminders():
     if appts:
         db.session.commit()
         logger.info("scheduler: marked %d appointment reminders", len(appts))
+
+
+def _mark_no_response_appointments():
+    """HU2: marca como `no_response` las citas cuyo recordatorio fue
+    enviado, la fecha programada ya pasó (con margen de 2h para reportes
+    tardíos), y el paciente no confirmó ni pidió reagendar.
+
+    Trazabilidad: el estado queda visible en el dashboard y el historial.
+    """
+    from app import db
+    from app.models import Appointment
+
+    cutoff = datetime.now() - timedelta(hours=2)
+    stale = (
+        Appointment.query
+        .filter_by(status="scheduled")
+        .filter(Appointment.reminder_sent_at.isnot(None))
+        .filter(Appointment.scheduled_at < cutoff)
+        .all()
+    )
+    for a in stale:
+        a.status = "no_response"
+    if stale:
+        db.session.commit()
+        logger.info("scheduler: marked %d appointments as no_response", len(stale))
 
 
 def _expire_pending_questionnaires():
@@ -187,6 +213,11 @@ def start_scheduler(app):
     sched.add_job(
         _wrap_with_app_context(app, _send_appointment_reminders),
         "interval", minutes=1, id="appointment_reminders",
+        max_instances=1, coalesce=True,
+    )
+    sched.add_job(
+        _wrap_with_app_context(app, _mark_no_response_appointments),
+        "interval", minutes=15, id="appointment_no_response",
         max_instances=1, coalesce=True,
     )
 

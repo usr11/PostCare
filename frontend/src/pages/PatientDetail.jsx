@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
+import PatientTimeline from "../components/PatientTimeline";
 
 export default function PatientDetail() {
   const { id } = useParams();
@@ -98,6 +99,13 @@ export default function PatientDetail() {
     return () => clearInterval(interval);
   }, [id, messages]);
 
+  // HU2: refresca citas en tiempo real para ver confirmaciones / reagendamientos.
+  useEffect(() => {
+    const interval = setInterval(reloadAppointments, 8000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -162,6 +170,21 @@ export default function PatientDetail() {
     pending: "bg-amber-100 text-amber-700",
   };
 
+  // Estado para citas con etiqueta "no_response".
+  const apptStatusBadge = (a) => {
+    if (a.status === "confirmed")
+      return { label: "Confirmada por paciente", cls: "bg-green-100 text-green-700" };
+    if (a.status === "reschedule_requested")
+      return { label: "Solicita reagendar", cls: "bg-amber-100 text-amber-700" };
+    if (a.status === "cancelled")
+      return { label: "Cancelada", cls: "bg-gray-100 text-gray-600" };
+    if (a.status === "no_response")
+      return { label: "Sin respuesta", cls: "bg-red-100 text-red-700" };
+    if (a.reminder_sent_at)
+      return { label: "Recordatorio enviado", cls: "bg-sky-100 text-sky-700" };
+    return { label: "Pendiente", cls: "bg-gray-100 text-gray-700" };
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-4">
@@ -170,6 +193,8 @@ export default function PatientDetail() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">{patient.name}</h1>
       </div>
+
+      <PatientTimeline patientId={Number(id)} />
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -327,16 +352,7 @@ export default function PatientDetail() {
           <div className="space-y-2">
             {appointments.map((a) => {
               const dt = new Date(a.scheduled_at);
-              const statusBadge =
-                a.status === "confirmed"
-                  ? { label: "Confirmada por paciente", cls: "bg-green-100 text-green-700" }
-                  : a.status === "reschedule_requested"
-                    ? { label: "Solicita reagendar", cls: "bg-amber-100 text-amber-700" }
-                    : a.status === "cancelled"
-                      ? { label: "Cancelada", cls: "bg-gray-100 text-gray-600" }
-                      : a.reminder_sent_at
-                        ? { label: "Recordatorio enviado", cls: "bg-sky-100 text-sky-700" }
-                        : { label: "Programada", cls: "bg-gray-100 text-gray-700" };
+              const statusBadge = apptStatusBadge(a);
               return (
                 <div
                   key={a.id}
@@ -489,23 +505,42 @@ export default function PatientDetail() {
                 No hay mensajes aún. Escribe una instrucción para el paciente.
               </p>
             )}
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.sender === "doctor" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                    msg.sender === "doctor" ? "bg-primary text-white" : "bg-white border border-gray-200 text-gray-800"
-                  }`}
-                >
-                  <p className={`text-xs font-semibold mb-0.5 ${msg.sender === "doctor" ? "text-sky-100" : "text-primary"}`}>
-                    {msg.sender === "doctor" ? "Médico" : "Paciente"}
-                  </p>
-                  <p className="text-sm">{msg.text}</p>
-                  <p className={`text-[10px] mt-1 ${msg.sender === "doctor" ? "text-sky-200" : "text-gray-400"}`}>
-                    {new Date(msg.created_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+            {messages.map((msg) => {
+              const att = msg.attachment;
+              const isImg = att && att.type === "wound_image";
+              return (
+                <div key={msg.id} className={`flex ${msg.sender === "doctor" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                      msg.sender === "doctor" ? "bg-primary text-white" : "bg-white border border-gray-200 text-gray-800"
+                    }`}
+                  >
+                    <p className={`text-xs font-semibold mb-0.5 ${msg.sender === "doctor" ? "text-sky-100" : "text-primary"}`}>
+                      {msg.sender === "doctor" ? "Médico" : "Paciente"}
+                    </p>
+                    <p className="text-sm">{msg.text}</p>
+                    {isImg && (
+                      <a
+                        href={api.woundImageAuthUrl(att.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block mt-2"
+                      >
+                        <img
+                          src={api.woundImageAuthUrl(att.id)}
+                          alt="Foto de herida"
+                          className="rounded-lg max-h-48 border border-white/40"
+                          loading="lazy"
+                        />
+                      </a>
+                    )}
+                    <p className={`text-[10px] mt-1 ${msg.sender === "doctor" ? "text-sky-200" : "text-gray-400"}`}>
+                      {new Date(msg.created_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
           <form onSubmit={handleSend} className="flex border-t border-gray-200">

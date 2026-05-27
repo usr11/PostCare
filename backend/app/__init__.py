@@ -47,6 +47,8 @@ def create_app():
     from app.routes.reports import reports_bp
     from app.routes.sos import sos_bp
     from app.routes.symptoms import symptoms_bp
+    from app.routes.timeline import timeline_bp
+    from app.routes.uploads import uploads_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(admissions_bp, url_prefix="/api/admissions")
@@ -60,6 +62,8 @@ def create_app():
     app.register_blueprint(messages_bp, url_prefix="/api/messages")
     app.register_blueprint(medications_bp, url_prefix="/api/medications")
     app.register_blueprint(chat_bp, url_prefix="/api/chat")
+    app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
+    app.register_blueprint(timeline_bp, url_prefix="/api/dashboard")
 
     if app.config.get("ENABLE_SCHEDULER", True):
         from app.scheduler import start_scheduler

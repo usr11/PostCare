@@ -1,9 +1,19 @@
-export default function ChatMessage({ message }) {
+export default function ChatMessage({ message, patientId }) {
   const isBot = message.sender === "bot";
   const isDoctor = message.sender === "doctor";
   const isMed = message.sender === "medication";
   const isAppt = message.sender === "appointment";
   const isLeft = isBot || isDoctor || isMed || isAppt;
+  const attachment = message.attachment;
+  // Para el chat del paciente (sin sesión) necesitamos firmar la URL con
+  // ?patient_id=<id>. Para el dashboard clínico, la sesión la autoriza
+  // y `attachment.url` ya es suficiente.
+  const imageUrl =
+    attachment && attachment.type === "wound_image"
+      ? patientId
+        ? `/api/uploads/wound/${attachment.id}?patient_id=${patientId}`
+        : attachment.url
+      : null;
 
   return (
     <div className={`flex ${isLeft ? "justify-start" : "justify-end"} mb-3`}>
@@ -48,6 +58,21 @@ export default function ChatMessage({ message }) {
           <p className="text-xs font-semibold text-primary mb-1">PostCare Bot</p>
         )}
         <p className="text-sm whitespace-pre-line">{message.text}</p>
+        {imageUrl && (
+          <a
+            href={imageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block mt-2"
+          >
+            <img
+              src={imageUrl}
+              alt="Foto de herida adjunta"
+              className="rounded-lg max-h-64 border border-gray-200"
+              loading="lazy"
+            />
+          </a>
+        )}
         {message.list && (
           <ul className="mt-2 space-y-1">
             {message.list.map((item, i) => (

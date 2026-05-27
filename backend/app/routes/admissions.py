@@ -6,10 +6,11 @@
 """
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.auth import require_role
@@ -22,6 +23,12 @@ ADMIN_ROLES = ("admissions", "admin")
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 # E.164-ish: '+' + 7..15 dígitos. Cubre indicativos como +57 (Colombia).
 PHONE_RE = re.compile(r"^\+\d{7,15}$")
+# Cédulas / pasaportes colombianos: alfanumérico, 5-20 chars, sin espacios.
+DOCUMENT_RE = re.compile(r"^[A-Za-z0-9-]{5,20}$")
+
+# Ventana razonable para fecha de cirugía: hasta 90 días atrás, hasta 180 días adelante.
+MAX_PAST_DAYS = 90
+MAX_FUTURE_DAYS = 180
 
 
 def _existing_surgery_types():
@@ -71,6 +78,19 @@ def create_patient():
             "error": "Documento, nombre, teléfono, protocolo y fecha de cirugía son obligatorios."
         }), 400
 
+    if not DOCUMENT_RE.match(document_number):
+        return jsonify({
+            "error": (
+                "El documento debe ser alfanumérico, entre 5 y 20 caracteres, "
+                "sin espacios."
+            ),
+        }), 400
+
+    if len(name) < 3:
+        return jsonify({
+            "error": "El nombre debe tener al menos 3 caracteres.",
+        }), 400
+
     if not PHONE_RE.match(phone):
         return jsonify({
             "error": "El teléfono debe incluir el indicativo de país (ej. +573001234567).",
@@ -78,6 +98,21 @@ def create_patient():
 
     if not TIME_RE.match(daily_time):
         return jsonify({"error": "Hora del cuestionario debe tener formato HH:MM."}), 400
+
+    today = date.today()
+    if surgery_date < today - timedelta(days=MAX_PAST_DAYS):
+        return jsonify({
+            "error": (
+                f"La fecha de cirugía no puede ser anterior a {MAX_PAST_DAYS} días. "
+                "Verifica con la historia clínica."
+            ),
+        }), 400
+    if surgery_date > today + timedelta(days=MAX_FUTURE_DAYS):
+        return jsonify({
+            "error": (
+                f"La fecha de cirugía no puede estar a más de {MAX_FUTURE_DAYS} días."
+            ),
+        }), 400
 
     if surgery_type not in _existing_surgery_types():
         return jsonify({
@@ -114,7 +149,15 @@ def create_patient():
         admitted_at=datetime.now(),
     )
     db.session.add(patient)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Carrera: otra admisión creó el mismo documento entre la verificación
+        # de duplicado y este commit. Devolver 409 amistoso en vez de 500.
+        db.session.rollback()
+        return jsonify({
+            "error": "Este documento ya fue registrado por otra sesión activa.",
+        }), 409
 
     return jsonify(patient.to_dict()), 201
 

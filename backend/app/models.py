@@ -160,22 +160,73 @@ class Message(db.Model):
     __tablename__ = "messages"
 
     id = db.Column(db.Integer, primary_key=True)
-    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
+    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False, index=True)
     sender = db.Column(db.String(20), nullable=False)
     text = db.Column(db.Text, nullable=False)
     read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
+    attachment_type = db.Column(db.String(30))  # e.g. "wound_image"
+    attachment_id = db.Column(db.Integer)        # FK lógico al recurso adjunto
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(), index=True)
 
     patient = db.relationship("Patient", backref=db.backref("messages", lazy=True))
 
     def to_dict(self):
+        attachment = None
+        if self.attachment_type == "wound_image" and self.attachment_id:
+            img = db.session.get(WoundImage, self.attachment_id)
+            if img:
+                attachment = {
+                    "type": "wound_image",
+                    "id": img.id,
+                    "url": f"/api/uploads/wound/{img.id}",
+                    "mime_type": img.mime_type,
+                    "size_bytes": img.size_bytes,
+                }
         return {
             "id": self.id,
             "patient_id": self.patient_id,
             "sender": self.sender,
             "text": self.text,
             "read": self.read,
+            "attachment": attachment,
             "created_at": self.created_at.isoformat(),
+        }
+
+
+class WoundImage(db.Model):
+    """HU1 — evidencia visual enviada por el paciente.
+
+    El archivo binario se guarda en disco (UPLOAD_FOLDER); en BD sólo
+    guardamos metadata y la ruta relativa. La URL pública es
+    `/api/uploads/wound/<id>` y exige sesión clínica o coincidencia
+    con `patient_id` para descargar.
+    """
+
+    __tablename__ = "wound_images"
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(
+        db.Integer, db.ForeignKey("patients.id"), nullable=False, index=True
+    )
+    storage_path = db.Column(db.String(500), nullable=False)
+    mime_type = db.Column(db.String(50), nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    original_name = db.Column(db.String(255))
+    uploaded_at = db.Column(
+        db.DateTime, default=lambda: datetime.now(), nullable=False, index=True
+    )
+
+    patient = db.relationship("Patient", backref=db.backref("wound_images", lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "url": f"/api/uploads/wound/{self.id}",
+            "mime_type": self.mime_type,
+            "size_bytes": self.size_bytes,
+            "original_name": self.original_name,
+            "uploaded_at": self.uploaded_at.isoformat(),
         }
 
 

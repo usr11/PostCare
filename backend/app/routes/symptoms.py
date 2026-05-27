@@ -126,12 +126,24 @@ def submit_answer():
         surgery_type=patient.surgery_type, order=next_order
     ).first()
 
+    # HU1: si reporta enrojecimiento/hinchazón/secreción en la herida,
+    # solicitamos foto para evaluación remota antes de continuar.
+    request_photo = (
+        answer_value == "si"
+        and "herida" in (question.question_text or "").lower()
+    )
+
     if next_question:
         record.current_question_order = next_order
         db.session.commit()
         return jsonify({
             "question": next_question.to_dict(),
             "status": "in_progress",
+            "request_photo": request_photo,
+            "photo_prompt": (
+                "Por favor toma una foto de la herida y adjúntala. "
+                "Acepto JPG o PNG hasta 10 MB."
+            ) if request_photo else None,
         })
 
     record.status = "completed"
@@ -141,6 +153,11 @@ def submit_answer():
     return jsonify({
         "question": None,
         "status": "completed",
+        "request_photo": request_photo,
+        "photo_prompt": (
+            "Por favor toma una foto de la herida y adjúntala. "
+            "Acepto JPG o PNG hasta 10 MB."
+        ) if request_photo else None,
         "message": (
             "¡Gracias por completar tu seguimiento de hoy! "
             "Tu información ha sido registrada. Cuídate mucho y nos vemos mañana."

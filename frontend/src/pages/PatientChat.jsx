@@ -11,8 +11,12 @@ const PHASES = {
   QUESTIONNAIRE: "questionnaire",
   COMPLETED: "completed",
   EMERGENCY: "emergency",
+  PHOTO_REQUEST: "photo_request",
   ERROR: "error",
 };
+
+const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png"];
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export default function PatientChat() {
   const navigate = useNavigate();
@@ -37,8 +41,11 @@ export default function PatientChat() {
   const [activeSOSAlertId, setActiveSOSAlertId] = useState(null);
   const [previousPhase, setPreviousPhase] = useState(null);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const seenReminderIds = useRef(new Set());
   const seenAppointmentIds = useRef(new Set());
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -161,11 +168,58 @@ export default function PatientChat() {
     return () => clearTimeout(timeout);
   }, [questionnaireStartedAt, phase]);
 
-  function addMessage(sender, text, list) {
+  function addMessage(sender, text, list, attachment) {
     setMessages((prev) => [
       ...prev,
-      { id: Date.now() + Math.random(), sender, text, list },
+      { id: Date.now() + Math.random(), sender, text, list, attachment },
     ]);
+  }
+
+  async function uploadPhoto(file) {
+    if (!patient || !file) return;
+    setPhotoError("");
+
+    if (!ALLOWED_IMAGE_MIMES.includes(file.type)) {
+      setPhotoError("Solo se aceptan imágenes JPG o PNG.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setPhotoError("La imagen supera 10 MB. Comprime o reduce la foto.");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const data = await api.uploadWoundImage(patient.id, file);
+      // Mostrar imagen como mensaje propio del paciente con thumbnail clickable.
+      addMessage("user", "📷 Foto de herida enviada", null, {
+        type: "wound_image",
+        id: data.image.id,
+        url: api.woundImageUrl(data.image.id, patient.id),
+      });
+      addMessage("bot", data.ack);
+      // Volver al estado correspondiente.
+      if (phase === PHASES.PHOTO_REQUEST) {
+        // Si quedaba cuestionario en curso lo retomamos, si no quedamos completados.
+        setPhase(currentQuestion ? PHASES.QUESTIONNAIRE : PHASES.COMPLETED);
+        if (currentQuestion) setButtons(currentQuestion.options);
+      }
+    } catch (err) {
+      setPhotoError(err.error || "No fue posible subir la foto.");
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function triggerPhotoRequest(promptText) {
+    addMessage(
+      "bot",
+      promptText ||
+        "Por favor toma una foto de la herida y adjúntala. Acepto JPG o PNG hasta 10 MB.",
+    );
+    setButtons(null);
+    setPhase(PHASES.PHOTO_REQUEST);
   }
 
   async function handleSubmit(e) {
@@ -303,7 +357,17 @@ export default function PatientChat() {
           addMessage("bot", data.message);
           setCurrentQuestion(null);
           setPhase(PHASES.COMPLETED);
+          // HU1: si el protocolo pide foto al finalizar, abrimos el adjunto.
+          if (data.request_photo) triggerPhotoRequest(data.photo_prompt);
         } else if (data.question) {
+          // HU1: si la respuesta dispara petición de foto, interrumpimos al
+          // paciente para que adjunte antes de seguir; al subir la foto
+          // (o saltar) retomamos en la siguiente pregunta.
+          if (data.request_photo) {
+            setCurrentQuestion(data.question);
+            triggerPhotoRequest(data.photo_prompt);
+            return;
+          }
           setCurrentQuestion(data.question);
           addMessage("bot", data.question.question_text);
           setButtons(data.question.options);
@@ -400,6 +464,17 @@ export default function PatientChat() {
     (phase === PHASES.QUESTIONNAIRE && !buttons);
 
   const sosDisabled = phase === PHASES.EMERGENCY || loading;
+  const photoEnabled =
+    patient &&
+    (phase === PHASES.ONBOARDED ||
+      phase === PHASES.QUESTIONNAIRE ||
+      phase === PHASES.COMPLETED ||
+      phase === PHASES.PHOTO_REQUEST);
+
+  function onFileSelected(e) {
+    const file = e.target.files?.[0];
+    if (file) uploadPhoto(file);
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white flex flex-col">
@@ -429,7 +504,11 @@ export default function PatientChat() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-2xl mx-auto">
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
+            <ChatMessage
+              key={msg.id}
+              message={msg}
+              patientId={patient?.id}
+            />
           ))}
           {buttons && (
             <ChatButtons
@@ -458,6 +537,43 @@ export default function PatientChat() {
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {photoEnabled && (
+        <div className="border-t border-gray-100 bg-white px-4 py-2">
+          <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+              onChange={onFileSelected}
+              className="hidden"
+              data-testid="wound-photo-input"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto || loading}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors disabled:opacity-50 ${
+                phase === PHASES.PHOTO_REQUEST
+                  ? "bg-amber-50 border-amber-300 text-amber-700"
+                  : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h4l2-3h6l2 3h4v12H3V7zM12 17a4 4 0 100-8 4 4 0 000 8z" />
+              </svg>
+              {uploadingPhoto
+                ? "Subiendo foto..."
+                : phase === PHASES.PHOTO_REQUEST
+                  ? "Adjuntar foto de la herida"
+                  : "Adjuntar evidencia (JPG/PNG)"}
+            </button>
+            {photoError && (
+              <p className="text-xs text-danger truncate">{photoError}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {showInput && (
         <div className="border-t border-gray-200 bg-white px-4 py-3">
