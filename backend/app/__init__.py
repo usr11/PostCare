@@ -69,4 +69,7 @@ def create_app():
         from app.scheduler import start_scheduler
         start_scheduler(app)
 
+    from app.cli import register_cli
+    register_cli(app)
+
     return app
