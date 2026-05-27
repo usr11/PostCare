@@ -2,6 +2,7 @@
 
 `@login_required` (de Flask-Login) cubre "hay sesión".
 `@require_role(...)` añade verificación de rol específico.
+`can_access_patient(patient)` centraliza la regla de ownership.
 """
 
 from functools import wraps
@@ -21,3 +22,12 @@ def require_role(*roles):
             return fn(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def can_access_patient(patient):
+    """True si el usuario actual puede ver/operar sobre este paciente."""
+    if not current_user.is_authenticated or patient is None:
+        return False
+    if current_user.role == "clinician":
+        return patient.clinician_id == current_user.id
+    return current_user.role in ("admin", "quality_lead", "admissions")

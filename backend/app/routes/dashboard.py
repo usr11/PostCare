@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user
 
 from app import db
-from app.auth import require_role
+from app.auth import can_access_patient, require_role
 from app.models import Alert, Patient, SymptomRecord
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -21,16 +21,17 @@ def _scope_patients(query):
     return query
 
 
-def _can_access_patient(patient):
-    if current_user.role == "clinician":
-        return patient.clinician_id == current_user.id
-    return current_user.role in ("admin", "quality_lead", "admissions")
-
-
 @dashboard_bp.route("/patients", methods=["GET"])
 @require_role(*READ_ROLES)
 def list_patients():
-    patients = _scope_patients(Patient.query).order_by(Patient.created_at.desc()).all()
+    """HU-09 C1: por defecto solo pacientes activos.
+    `?include_inactive=true` devuelve la lista completa para casos administrativos.
+    """
+    include_inactive = request.args.get("include_inactive") == "true"
+    q = _scope_patients(Patient.query)
+    if not include_inactive:
+        q = q.filter(Patient.status == "active")
+    patients = q.order_by(Patient.created_at.desc()).all()
     return jsonify([p.to_dict() for p in patients])
 
 
@@ -38,7 +39,7 @@ def list_patients():
 @require_role(*READ_ROLES)
 def get_patient(patient_id):
     patient = db.get_or_404(Patient, patient_id)
-    if not _can_access_patient(patient):
+    if not can_access_patient(patient):
         return jsonify({"error": "No tienes acceso a este paciente"}), 403
     records = (
         SymptomRecord.query
@@ -76,7 +77,7 @@ def list_alerts():
 @require_role(*READ_ROLES)
 def get_alert(alert_id):
     alert = db.get_or_404(Alert, alert_id)
-    if not _can_access_patient(alert.patient):
+    if not can_access_patient(alert.patient):
         return jsonify({"error": "No tienes acceso a esta alerta"}), 403
     return jsonify(alert.to_dict())
 
@@ -95,7 +96,7 @@ def resolve_alert(alert_id):
 
     alert = db.get_or_404(Alert, alert_id)
 
-    if not _can_access_patient(alert.patient):
+    if not can_access_patient(alert.patient):
         return jsonify({"error": "No tienes acceso a esta alerta"}), 403
 
     if alert.status != "active":
@@ -137,7 +138,7 @@ def resolve_alert(alert_id):
 @require_role(*READ_ROLES)
 def alert_history(patient_id):
     patient = db.get_or_404(Patient, patient_id)
-    if not _can_access_patient(patient):
+    if not can_access_patient(patient):
         return jsonify({"error": "No tienes acceso a este paciente"}), 403
     alerts = (
         Alert.query

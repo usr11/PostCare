@@ -31,6 +31,30 @@ export default function Layout() {
                 >
                   Panel General
                 </Link>
+                {user && ["admissions", "admin"].includes(user.role) && (
+                  <Link
+                    to="/admissions"
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      location.pathname.startsWith("/admissions")
+                        ? "bg-sky-50 text-primary"
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    Admisiones
+                  </Link>
+                )}
+                {user && ["quality_lead", "admin"].includes(user.role) && (
+                  <Link
+                    to="/reports"
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      location.pathname.startsWith("/reports")
+                        ? "bg-sky-50 text-primary"
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    Reportes
+                  </Link>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-4">

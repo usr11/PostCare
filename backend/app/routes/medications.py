@@ -3,19 +3,28 @@ from datetime import date, datetime, timedelta
 from flask import Blueprint, jsonify, request
 
 from app import db
+from app.auth import can_access_patient, require_role
 from app.models import Medication, MedicationReminder, Patient
 
 medications_bp = Blueprint("medications", __name__)
 
 
+CLINIC_READ = ("clinician", "admin", "quality_lead", "admissions")
+CLINIC_WRITE = ("clinician", "admin")
+
+
 @medications_bp.route("/<int:patient_id>", methods=["GET"])
+@require_role(*CLINIC_READ)
 def list_medications(patient_id):
-    db.get_or_404(Patient, patient_id)
+    patient = db.get_or_404(Patient, patient_id)
+    if not can_access_patient(patient):
+        return jsonify({"error": "No tienes acceso a este paciente"}), 403
     meds = Medication.query.filter_by(patient_id=patient_id, active=True).all()
     return jsonify([m.to_dict() for m in meds])
 
 
 @medications_bp.route("/", methods=["POST"])
+@require_role(*CLINIC_WRITE)
 def add_medication():
     data = request.get_json()
     patient_id = data.get("patient_id")
@@ -26,7 +35,9 @@ def add_medication():
     if not all([patient_id, name, dose, schedule_times]):
         return jsonify({"error": "Todos los campos son requeridos"}), 400
 
-    db.get_or_404(Patient, patient_id)
+    patient = db.get_or_404(Patient, patient_id)
+    if not can_access_patient(patient):
+        return jsonify({"error": "No tienes acceso a este paciente"}), 403
 
     med = Medication(
         patient_id=patient_id,
@@ -41,8 +52,11 @@ def add_medication():
 
 
 @medications_bp.route("/<int:med_id>", methods=["DELETE"])
+@require_role(*CLINIC_WRITE)
 def deactivate_medication(med_id):
     med = db.get_or_404(Medication, med_id)
+    if not can_access_patient(med.patient):
+        return jsonify({"error": "No tienes acceso a este medicamento"}), 403
     med.active = False
     db.session.commit()
     return jsonify({"ok": True})
@@ -102,8 +116,11 @@ def postpone_reminder(reminder_id):
 
 
 @medications_bp.route("/reminders/history/<int:patient_id>", methods=["GET"])
+@require_role(*CLINIC_READ)
 def reminder_history(patient_id):
-    db.get_or_404(Patient, patient_id)
+    patient = db.get_or_404(Patient, patient_id)
+    if not can_access_patient(patient):
+        return jsonify({"error": "No tienes acceso a este paciente"}), 403
     reminders = (
         MedicationReminder.query
         .filter_by(patient_id=patient_id)

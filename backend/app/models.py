@@ -50,9 +50,12 @@ class Patient(db.Model):
     status = db.Column(db.String(20), default="pending")
     daily_questionnaire_time = db.Column(db.String(5), default="09:00")
     clinician_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    admitted_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    admitted_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now())
 
     clinician = db.relationship("User", lazy=True, foreign_keys=[clinician_id])
+    admitter = db.relationship("User", lazy=True, foreign_keys=[admitted_by])
     symptom_records = db.relationship("SymptomRecord", backref="patient", lazy=True)
     alerts = db.relationship("Alert", backref="patient", lazy=True)
 
@@ -79,6 +82,9 @@ class Patient(db.Model):
             "board_status": self.board_status,
             "clinician_id": self.clinician_id,
             "clinician_name": self.clinician.full_name if self.clinician else None,
+            "admitted_by": self.admitted_by,
+            "admitted_by_name": self.admitter.full_name if self.admitter else None,
+            "admitted_at": self.admitted_at.isoformat() if self.admitted_at else None,
             "created_at": self.created_at.isoformat(),
         }
 

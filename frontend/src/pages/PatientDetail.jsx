@@ -17,6 +17,9 @@ export default function PatientDetail() {
   const [addingMed, setAddingMed] = useState(false);
 
   const [alertHistory, setAlertHistory] = useState([]);
+  const [protocols, setProtocols] = useState([]);
+  const [protocolError, setProtocolError] = useState("");
+  const [changingProtocol, setChangingProtocol] = useState(false);
 
   useEffect(() => {
     api.getPatient(id).then(setData).catch(console.error).finally(() => setLoading(false));
@@ -24,7 +27,22 @@ export default function PatientDetail() {
     api.getMedications(id).then(setMedications).catch(console.error);
     api.getReminderHistory(id).then(setReminderHistory).catch(console.error);
     api.getAlertHistory(id).then(setAlertHistory).catch(console.error);
+    api.listProtocols().then(setProtocols).catch(console.error);
   }, [id]);
+
+  async function handleProtocolChange(surgeryType) {
+    if (!data || surgeryType === data.patient.surgery_type) return;
+    setProtocolError("");
+    setChangingProtocol(true);
+    try {
+      const updated = await api.changeProtocol(id, surgeryType);
+      setData((prev) => (prev ? { ...prev, patient: updated } : prev));
+    } catch (err) {
+      setProtocolError(err.error || "No fue posible cambiar el protocolo.");
+    } finally {
+      setChangingProtocol(false);
+    }
+  }
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -119,16 +137,34 @@ export default function PatientDetail() {
             {[
               ["Documento", patient.document_number],
               ["Teléfono", patient.phone],
-              ["Cirugía", patient.surgery_type],
               ["Fecha de cirugía", new Date(patient.surgery_date).toLocaleDateString("es-CO")],
               ["Estado", patient.status === "active" ? "Activo" : "Pendiente"],
               ["Onboarding", patient.onboarded ? "Completado" : "Pendiente"],
+              ["Clínico responsable", patient.clinician_name || "Sin asignar"],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between">
                 <dt className="text-sm text-gray-500">{label}</dt>
                 <dd className="text-sm font-medium text-gray-900">{value}</dd>
               </div>
             ))}
+            <div className="pt-3 border-t border-gray-100">
+              <label className="block text-sm text-gray-500 mb-1">Protocolo asignado</label>
+              <select
+                value={patient.surgery_type}
+                onChange={(e) => handleProtocolChange(e.target.value)}
+                disabled={changingProtocol || protocols.length === 0}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+              >
+                {protocols.map((p) => (
+                  <option key={p.surgery_type} value={p.surgery_type}>
+                    {p.surgery_type} ({p.question_count} preguntas)
+                  </option>
+                ))}
+              </select>
+              {protocolError && (
+                <p className="text-xs text-danger mt-2">{protocolError}</p>
+              )}
+            </div>
           </dl>
         </div>
 

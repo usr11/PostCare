@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from flask import Blueprint, jsonify, request
 
 from app import db
+from app.auth import can_access_patient, require_role
 from app.models import Patient, ProtocolQuestion, SymptomAnswer, SymptomRecord
 
 symptoms_bp = Blueprint("symptoms", __name__)
@@ -148,8 +149,11 @@ def submit_answer():
 
 
 @symptoms_bp.route("/history/<int:patient_id>", methods=["GET"])
+@require_role("clinician", "admin", "quality_lead", "admissions")
 def get_history(patient_id):
-    db.get_or_404(Patient, patient_id)
+    patient = db.get_or_404(Patient, patient_id)
+    if not can_access_patient(patient):
+        return jsonify({"error": "No tienes acceso a este paciente"}), 403
     records = (
         SymptomRecord.query
         .filter_by(patient_id=patient_id)

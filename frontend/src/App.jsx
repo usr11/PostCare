@@ -1,10 +1,12 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useAuth } from "./contexts/AuthContext";
+import Admissions from "./pages/Admissions";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import PatientChat from "./pages/PatientChat";
 import PatientDetail from "./pages/PatientDetail";
+import Reports from "./pages/Reports";
 
 const CLINIC_ROLES = new Set(["clinician", "admin", "quality_lead", "admissions"]);
 
@@ -36,6 +38,15 @@ function RequireRole({ role, children }) {
   return children;
 }
 
+function RequireUserRole({ allow, children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user || !allow.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -59,6 +70,22 @@ export default function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/patient/:id" element={<PatientDetail />} />
+          <Route
+            path="/admissions"
+            element={
+              <RequireUserRole allow={["admissions", "admin"]}>
+                <Admissions />
+              </RequireUserRole>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <RequireUserRole allow={["quality_lead", "admin"]}>
+                <Reports />
+              </RequireUserRole>
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>

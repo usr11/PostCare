@@ -24,6 +24,8 @@ const BOARD_LABEL = {
   rojo: "Rojo",
 };
 
+const BOARD_RANK = { rojo: 0, amarillo: 1, verde: 2 };
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [patients, setPatients] = useState([]);
@@ -33,9 +35,29 @@ export default function Dashboard() {
   const [resolveNote, setResolveNote] = useState("");
   const [resolveError, setResolveError] = useState("");
   const [resolving, setResolving] = useState(false);
+  const [onlyRed, setOnlyRed] = useState(false);
 
   const { user } = useAuth();
   const clinicUser = user?.full_name || "Personal clínico";
+
+  const sortedPatients = [...patients].sort((a, b) => {
+    const ra = BOARD_RANK[a.board_status] ?? 99;
+    const rb = BOARD_RANK[b.board_status] ?? 99;
+    if (ra !== rb) return ra - rb;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+
+  const visiblePatients = onlyRed
+    ? sortedPatients.filter((p) => p.board_status === "rojo")
+    : sortedPatients;
+
+  const triageCounts = patients.reduce(
+    (acc, p) => {
+      acc[p.board_status] = (acc[p.board_status] || 0) + 1;
+      return acc;
+    },
+    { rojo: 0, amarillo: 0, verde: 0 },
+  );
 
   async function reloadAll() {
     try {
@@ -174,7 +196,33 @@ export default function Dashboard() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Pacientes</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-gray-900">Pacientes</h2>
+            <div className="flex gap-2">
+              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                {triageCounts.rojo} en rojo
+              </span>
+              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                {triageCounts.amarillo} en amarillo
+              </span>
+              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                {triageCounts.verde} en verde
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOnlyRed((v) => !v)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              onlyRed
+                ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            {onlyRed ? "Mostrar todos" : "Solo Rojo"}
+          </button>
+        </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <table className="w-full">
             <thead>
@@ -198,10 +246,21 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {patients.map((p) => (
+              {visiblePatients.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
+                    {onlyRed
+                      ? "No hay pacientes en estado Rojo."
+                      : "No hay pacientes activos."}
+                  </td>
+                </tr>
+              )}
+              {visiblePatients.map((p) => (
                 <tr
                   key={p.id}
-                  className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                  className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${
+                    p.board_status === "rojo" ? "bg-red-50/50" : ""
+                  }`}
                 >
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
                     {p.name}

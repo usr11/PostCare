@@ -116,4 +116,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ patient_id, message, history }),
     }),
+
+  getComplianceReport: (from, to) =>
+    request(`/reports/compliance?from=${from}&to=${to}`),
+
+  listProtocols: () => request("/protocols"),
+  changeProtocol: (patient_id, surgery_type) =>
+    request(`/patients/${patient_id}/protocol`, {
+      method: "PUT",
+      body: JSON.stringify({ surgery_type }),
+    }),
+
+  listClinicians: () => request("/admissions/clinicians"),
+  listAdmissionPatients: () => request("/admissions/patients"),
+  createPatient: (payload) =>
+    request("/admissions/patients", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  assignClinician: (patient_id, clinician_id) =>
+    request(`/admissions/patients/${patient_id}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ clinician_id }),
+    }),
 };
