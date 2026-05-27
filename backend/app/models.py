@@ -234,6 +234,43 @@ class MedicationReminder(db.Model):
         }
 
 
+class Appointment(db.Model):
+    __tablename__ = "appointments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False, index=True)
+    scheduled_at = db.Column(db.DateTime, nullable=False, index=True)
+    location = db.Column(db.String(200), nullable=False)
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(30), nullable=False, default="scheduled")
+    reminder_sent_at = db.Column(db.DateTime)
+    confirmed_at = db.Column(db.DateTime)
+    reschedule_requested_at = db.Column(db.DateTime)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now())
+
+    patient = db.relationship("Patient", backref=db.backref("appointments", lazy=True))
+    creator = db.relationship("User", lazy=True, foreign_keys=[created_by])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "patient_name": self.patient.name if self.patient else None,
+            "scheduled_at": self.scheduled_at.isoformat(),
+            "location": self.location,
+            "notes": self.notes,
+            "status": self.status,
+            "reminder_sent_at": self.reminder_sent_at.isoformat() if self.reminder_sent_at else None,
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
+            "reschedule_requested_at": (
+                self.reschedule_requested_at.isoformat()
+                if self.reschedule_requested_at else None
+            ),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Alert(db.Model):
     __tablename__ = "alerts"
 

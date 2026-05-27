@@ -120,6 +120,27 @@ export const api = {
   getComplianceReport: (from, to) =>
     request(`/reports/compliance?from=${from}&to=${to}`),
 
+  listAppointments: (patient_id) =>
+    request(`/appointments/${patient_id}`),
+  createAppointment: (payload) =>
+    request("/appointments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAppointment: (id, payload) =>
+    request(`/appointments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  cancelAppointment: (id) =>
+    request(`/appointments/${id}`, { method: "DELETE" }),
+  getUpcomingAppointments: (patient_id) =>
+    request(`/appointments/upcoming/${patient_id}`),
+  confirmAppointment: (id) =>
+    request(`/appointments/${id}/confirm`, { method: "POST" }),
+  requestReschedule: (id) =>
+    request(`/appointments/${id}/reschedule`, { method: "POST" }),
+
   listProtocols: () => request("/protocols"),
   changeProtocol: (patient_id, surgery_type) =>
     request(`/patients/${patient_id}/protocol`, {

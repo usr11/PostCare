@@ -36,6 +36,7 @@ def create_app():
     login_manager.init_app(app)
 
     from app.routes.admissions import admissions_bp
+    from app.routes.appointments import appointments_bp
     from app.routes.auth import auth_bp
     from app.routes.chat import chat_bp
     from app.routes.dashboard import dashboard_bp
@@ -49,6 +50,7 @@ def create_app():
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(admissions_bp, url_prefix="/api/admissions")
+    app.register_blueprint(appointments_bp, url_prefix="/api/appointments")
     app.register_blueprint(protocols_bp, url_prefix="/api")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
     app.register_blueprint(onboarding_bp, url_prefix="/api/onboarding")

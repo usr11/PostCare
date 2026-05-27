@@ -38,6 +38,7 @@ export default function PatientChat() {
   const [previousPhase, setPreviousPhase] = useState(null);
   const messagesEndRef = useRef(null);
   const seenReminderIds = useRef(new Set());
+  const seenAppointmentIds = useRef(new Set());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -90,6 +91,51 @@ export default function PatientChat() {
           if (phase !== PHASES.QUESTIONNAIRE && phase !== PHASES.EMERGENCY) {
             setButtons(btns);
           }
+        }
+      } catch {
+        /* skip */
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [patient, phase]);
+
+  useEffect(() => {
+    if (!patient) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const upcoming = await api.getUpcomingAppointments(patient.id);
+        const newOnes = upcoming.filter(
+          (a) => !seenAppointmentIds.current.has(a.id),
+        );
+        if (newOnes.length === 0) return;
+
+        for (const a of newOnes) {
+          const dt = new Date(a.scheduled_at);
+          const fecha = dt.toLocaleDateString("es-CO", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+          const hora = dt.toLocaleTimeString("es-CO", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          addMessage(
+            "appointment",
+            `Tienes una cita de control programada:\n📅 ${fecha}\n🕐 ${hora}\n📍 ${a.location}\n\n¿Confirmas tu asistencia?`,
+          );
+          seenAppointmentIds.current.add(a.id);
+        }
+
+        const last = newOnes[newOnes.length - 1];
+        if (phase !== PHASES.QUESTIONNAIRE && phase !== PHASES.EMERGENCY) {
+          setButtons([
+            { label: "Confirmar asistencia", value: `appt_confirm_${last.id}` },
+            { label: "Reagendar", value: `appt_reschedule_${last.id}` },
+          ]);
         }
       } catch {
         /* skip */
@@ -274,6 +320,20 @@ export default function PatientChat() {
       if (option.value?.startsWith("med_postpone_")) {
         const reminderId = parseInt(option.value.replace("med_postpone_", ""));
         const data = await api.postponeReminder(reminderId);
+        addMessage("bot", data.message);
+        return;
+      }
+
+      if (option.value?.startsWith("appt_confirm_")) {
+        const apptId = parseInt(option.value.replace("appt_confirm_", ""));
+        const data = await api.confirmAppointment(apptId);
+        addMessage("bot", data.message);
+        return;
+      }
+
+      if (option.value?.startsWith("appt_reschedule_")) {
+        const apptId = parseInt(option.value.replace("appt_reschedule_", ""));
+        const data = await api.requestReschedule(apptId);
         addMessage("bot", data.message);
         return;
       }

@@ -21,6 +21,15 @@ export default function PatientDetail() {
   const [protocolError, setProtocolError] = useState("");
   const [changingProtocol, setChangingProtocol] = useState(false);
 
+  const [appointments, setAppointments] = useState([]);
+  const [apptForm, setApptForm] = useState({ scheduled_at: "", location: "", notes: "" });
+  const [apptError, setApptError] = useState("");
+  const [savingAppt, setSavingAppt] = useState(false);
+
+  function reloadAppointments() {
+    api.listAppointments(id).then(setAppointments).catch(console.error);
+  }
+
   useEffect(() => {
     api.getPatient(id).then(setData).catch(console.error).finally(() => setLoading(false));
     api.getMessages(id).then(setMessages).catch(console.error);
@@ -28,7 +37,39 @@ export default function PatientDetail() {
     api.getReminderHistory(id).then(setReminderHistory).catch(console.error);
     api.getAlertHistory(id).then(setAlertHistory).catch(console.error);
     api.listProtocols().then(setProtocols).catch(console.error);
+    reloadAppointments();
   }, [id]);
+
+  async function handleCreateAppointment(e) {
+    e.preventDefault();
+    setApptError("");
+    if (!apptForm.scheduled_at || !apptForm.location.trim()) return;
+    setSavingAppt(true);
+    try {
+      await api.createAppointment({
+        patient_id: Number(id),
+        scheduled_at: apptForm.scheduled_at,
+        location: apptForm.location.trim(),
+        notes: apptForm.notes.trim() || null,
+      });
+      setApptForm({ scheduled_at: "", location: "", notes: "" });
+      reloadAppointments();
+    } catch (err) {
+      setApptError(err.error || "No fue posible programar la cita.");
+    } finally {
+      setSavingAppt(false);
+    }
+  }
+
+  async function handleCancelAppointment(apptId) {
+    if (!confirm("¿Cancelar esta cita?")) return;
+    try {
+      await api.cancelAppointment(apptId);
+      reloadAppointments();
+    } catch (err) {
+      alert(err.error || "No fue posible cancelar la cita.");
+    }
+  }
 
   async function handleProtocolChange(surgeryType) {
     if (!data || surgeryType === data.patient.surgery_type) return;
@@ -228,6 +269,111 @@ export default function PatientDetail() {
           </div>
         </div>
       )}
+
+      {/* Citas de control */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Citas de control</h2>
+
+        <form
+          onSubmit={handleCreateAppointment}
+          className="grid md:grid-cols-4 gap-3 items-end mb-6"
+        >
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fecha y hora</label>
+            <input
+              type="datetime-local"
+              value={apptForm.scheduled_at}
+              onChange={(e) => setApptForm({ ...apptForm, scheduled_at: e.target.value })}
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Lugar</label>
+            <input
+              type="text"
+              value={apptForm.location}
+              onChange={(e) => setApptForm({ ...apptForm, location: e.target.value })}
+              required
+              placeholder="Ej: Consultorio 305"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Notas</label>
+            <input
+              type="text"
+              value={apptForm.notes}
+              onChange={(e) => setApptForm({ ...apptForm, notes: e.target.value })}
+              placeholder="Opcional"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={savingAppt}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
+          >
+            {savingAppt ? "Guardando..." : "Programar cita"}
+          </button>
+          {apptError && (
+            <p className="md:col-span-4 text-sm text-danger">{apptError}</p>
+          )}
+        </form>
+
+        {appointments.length === 0 ? (
+          <p className="text-sm text-gray-500">Sin citas programadas.</p>
+        ) : (
+          <div className="space-y-2">
+            {appointments.map((a) => {
+              const dt = new Date(a.scheduled_at);
+              const statusBadge =
+                a.status === "confirmed"
+                  ? { label: "Confirmada por paciente", cls: "bg-green-100 text-green-700" }
+                  : a.status === "reschedule_requested"
+                    ? { label: "Solicita reagendar", cls: "bg-amber-100 text-amber-700" }
+                    : a.status === "cancelled"
+                      ? { label: "Cancelada", cls: "bg-gray-100 text-gray-600" }
+                      : a.reminder_sent_at
+                        ? { label: "Recordatorio enviado", cls: "bg-sky-100 text-sky-700" }
+                        : { label: "Programada", cls: "bg-gray-100 text-gray-700" };
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between py-2 border-b border-gray-50"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {dt.toLocaleString("es-CO", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                    <p className="text-xs text-gray-500">{a.location}</p>
+                    {a.notes && <p className="text-xs text-gray-400 italic">{a.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge.cls}`}>
+                      {statusBadge.label}
+                    </span>
+                    {a.status !== "cancelled" && (
+                      <button
+                        onClick={() => handleCancelAppointment(a.id)}
+                        className="text-xs text-gray-400 hover:text-danger transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Medicamentos */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

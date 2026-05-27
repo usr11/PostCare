@@ -102,6 +102,32 @@ def _create_daily_symptom_records():
         logger.info("scheduler: scheduled %d daily questionnaires", created)
 
 
+def _send_appointment_reminders():
+    """HU-07: marca el recordatorio de citas cuando faltan ≤ 24h.
+
+    El paciente las descubre vía polling en /api/appointments/upcoming/<id>.
+    """
+    from app import db
+    from app.models import Appointment
+
+    now = datetime.now()
+    window_end = now + timedelta(hours=24)
+
+    appts = (
+        Appointment.query
+        .filter_by(status="scheduled")
+        .filter(Appointment.reminder_sent_at.is_(None))
+        .filter(Appointment.scheduled_at > now)
+        .filter(Appointment.scheduled_at <= window_end)
+        .all()
+    )
+    for a in appts:
+        a.reminder_sent_at = now
+    if appts:
+        db.session.commit()
+        logger.info("scheduler: marked %d appointment reminders", len(appts))
+
+
 def _expire_pending_questionnaires():
     """Marca cuestionarios in_progress no respondidos por más de 1 hora."""
     from app import db
@@ -156,6 +182,11 @@ def start_scheduler(app):
     sched.add_job(
         _wrap_with_app_context(app, _expire_pending_questionnaires),
         "interval", minutes=5, id="expire_questionnaires",
+        max_instances=1, coalesce=True,
+    )
+    sched.add_job(
+        _wrap_with_app_context(app, _send_appointment_reminders),
+        "interval", minutes=1, id="appointment_reminders",
         max_instances=1, coalesce=True,
     )
 
